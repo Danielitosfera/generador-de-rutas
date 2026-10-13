@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Trafiqueishon — generador y simulador de rutas
 
 Aplicación de escritorio JavaFX para visualizar las vías de Juliaca, editar
@@ -65,3 +66,6 @@ capacidad; no modela conteos observados ni ascensos/bajadas en cada paradero.
 El planificador usa Dijkstra con los costos de tiempo actuales; la calidad de
 las estimaciones de hora punta y eventos depende de los factores configurados,
 no de mediciones de tráfico en vivo.
+=======
+# generador-de-rutas
+>>>>>>> 10ecfd4e9e312f4975fce1e139b79ccffbb39ab4
