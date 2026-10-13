@@ -17,7 +17,7 @@ public class GrafoVial {
 
     private final List<Nodo> nodos = new ArrayList<>();
     private final List<Edge> edges = new ArrayList<>();
-    private final Map<SnapKey, Integer> snapIndex = new HashMap<>();
+    private Map<SnapKey, Integer> snapIndex = new HashMap<>();
     private STRtree strtree = new STRtree();
 
     private double minLon, minLat, maxLon, maxLat;
@@ -35,7 +35,7 @@ public class GrafoVial {
     public void construir(List<Via> vias, Proyector proyector) {
         nodos.clear();
         edges.clear();
-        snapIndex.clear();
+        snapIndex = new HashMap<>();
         velocidadMaximaMps = 1.0;
         minLon = proyector.getMinLon();
         minLat = proyector.getMinLat();
@@ -78,6 +78,7 @@ public class GrafoVial {
             strtree.insert(new Envelope(n.x, n.x, n.y, n.y), n.id);
         }
         strtree.build();
+        snapIndex = Map.of();
     }
 
     private Edge crearEdge(int id, Nodo a, Nodo b, Via v) {

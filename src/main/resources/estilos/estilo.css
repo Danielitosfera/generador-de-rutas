@@ -95,3 +95,11 @@
 .scroll-bar:vertical .thumb {
     -fx-background-color: #585B70;
 }
+
+.color-picker {
+    -fx-background-color: #313244;
+}
+
+.color-picker .label {
+    -fx-text-fill: #CDD6F4;
+}

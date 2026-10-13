@@ -2,6 +2,8 @@ package trafiqueishon.geo;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,8 +26,7 @@ public class GeoJsonParser {
             if (is == null) {
                 throw new RuntimeException("No se encontro el recurso: " + rutaRecurso);
             }
-            JsonNode root = mapper.readTree(is);
-            return parsear(root);
+            return parsear(is);
         } catch (Exception e) {
             throw new RuntimeException("Error al parsear GeoJSON: " + e.getMessage(), e);
         }
@@ -33,11 +34,39 @@ public class GeoJsonParser {
 
     public List<Via> parsearArchivo(Path archivo) throws IOException {
         try (InputStream input = Files.newInputStream(archivo)) {
-            JsonNode root = mapper.readTree(input);
-            List<Via> vias = parsear(root);
+            List<Via> vias = parsear(input);
             if (vias.isEmpty()) throw new IOException("El GeoJSON no contiene calles LineString.");
             return vias;
         }
+    }
+
+    private List<Via> parsear(InputStream input) throws IOException {
+        List<Via> vias = new ArrayList<>(8000);
+        try (JsonParser json = mapper.getFactory().createParser(input)) {
+            if (json.nextToken() != JsonToken.START_OBJECT) {
+                throw new IOException("La raiz GeoJSON debe ser un objeto.");
+            }
+            while (json.nextToken() != JsonToken.END_OBJECT) {
+                if (json.currentToken() != JsonToken.FIELD_NAME) {
+                    throw new IOException("Estructura GeoJSON inválida.");
+                }
+                String campo = json.currentName();
+                JsonToken valor = json.nextToken();
+                if ("features".equals(campo) && valor == JsonToken.START_ARRAY) {
+                    while (json.nextToken() != JsonToken.END_ARRAY) {
+                        if (json.currentToken() != JsonToken.START_OBJECT) {
+                            json.skipChildren();
+                            continue;
+                        }
+                        JsonNode feature = mapper.readTree(json);
+                        agregarFeature(vias, feature);
+                    }
+                } else {
+                    json.skipChildren();
+                }
+            }
+        }
+        return vias;
     }
 
     private List<Via> parsear(JsonNode root) {
@@ -49,24 +78,24 @@ public class GeoJsonParser {
         JsonNode features = root.get("features");
         if (features == null || !features.isArray()) return vias;
 
-        for (JsonNode feature : features) {
-            JsonNode geometry = feature.get("geometry");
-            if (geometry == null) continue;
-            JsonNode tipoNode = geometry.get("type");
-            if (tipoNode == null || !tipoNode.isTextual()) continue;
-            String tipo = tipoNode.asText();
-            JsonNode props = feature.get("properties");
-            JsonNode coordsNode = geometry.get("coordinates");
-            if (coordsNode == null) continue;
-            if ("LineString".equals(tipo)) {
-                agregarVia(vias, coordsNode, props, feature);
-            } else if ("MultiLineString".equals(tipo)) {
-                for (JsonNode linea : coordsNode) {
-                    agregarVia(vias, linea, props, feature);
-                }
-            }
-        }
+        for (JsonNode feature : features) agregarFeature(vias, feature);
         return vias;
+    }
+
+    private void agregarFeature(List<Via> vias, JsonNode feature) {
+        JsonNode geometry = feature.get("geometry");
+        if (geometry == null) return;
+        JsonNode tipoNode = geometry.get("type");
+        if (tipoNode == null || !tipoNode.isTextual()) return;
+        String tipo = tipoNode.asText();
+        JsonNode props = feature.get("properties");
+        JsonNode coordsNode = geometry.get("coordinates");
+        if (coordsNode == null) return;
+        if ("LineString".equals(tipo)) {
+            agregarVia(vias, coordsNode, props, feature);
+        } else if ("MultiLineString".equals(tipo)) {
+            for (JsonNode linea : coordsNode) agregarVia(vias, linea, props, feature);
+        }
     }
 
     private void agregarVia(List<Via> vias, JsonNode coordsNode, JsonNode props,

@@ -29,13 +29,13 @@ public class Proyector {
 
         for (Via v : vias) {
             if (v.coords == null || v.coords.isEmpty()) {
-                v.projX = new double[0];
-                v.projY = new double[0];
+                v.projX = new float[0];
+                v.projY = new float[0];
                 continue;
             }
             int n = v.coords.size();
-            v.projX = new double[n];
-            v.projY = new double[n];
+            v.projX = new float[n];
+            v.projY = new float[n];
 
             double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE;
             double maxX = -Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
@@ -44,8 +44,8 @@ public class Proyector {
                 double[] c = v.coords.get(i);
                 double nx = (c[0] - minLon) / anchoGeo;
                 double ny = (maxLat - c[1]) / altoGeo;
-                v.projX[i] = nx;
-                v.projY[i] = ny;
+                v.projX[i] = (float) nx;
+                v.projY[i] = (float) ny;
 
                 if (nx < minX) minX = nx;
                 if (nx > maxX) maxX = nx;

@@ -5,6 +5,8 @@ import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
@@ -22,8 +24,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class VentanaPrincipal {
+    private static final Logger LOG = Logger.getLogger(VentanaPrincipal.class.getName());
     private final BorderPane root = new BorderPane();
     private final MapaRutasCanvas mapa = new MapaRutasCanvas();
     private final ListView<PuntoImportante> listaPuntos = new ListView<>();
@@ -34,6 +39,9 @@ public class VentanaPrincipal {
     private final Label lblCoords = new Label("Long.: --  Lat.: --");
     private final Label lblZoom = new Label("Zoom: --");
     private final Label lblRelojStatus = new Label("Hora: --:--");
+    private final HBox barraEstado;
+    private final VBox barraSuperior = new VBox();
+    private final TabPane panelLateral = new TabPane();
     private final CheckBox chkIdaNeon = new CheckBox("Mostrar ida · azul neón");
     private final CheckBox chkVueltaNeon = new CheckBox("Mostrar vuelta · rojo neón");
     private final CheckBox chkMapaCalor = new CheckBox("Mostrar mapa de calor");
@@ -44,10 +52,11 @@ public class VentanaPrincipal {
     private final Spinner<Integer> minutoInicio = new Spinner<>(0, 59, 0);
     private final Label resumenPasajeros = new Label();
     private final Label lblHoraSimulada = new Label("Hora simulada: --:--");
-    private final Slider velocidadSimulacion = new Slider(0.25, 10, 1);
+    private final ComboBox<Double> velocidadSimulacion = new ComboBox<>();
 
     private final GestorTrayectos gestor = new GestorTrayectos();
     private final SimuladorBuses simulador = new SimuladorBuses();
+    private final GestorEventos gestorEventos = new GestorEventos();
     private final LectorPuntosJson lectorJson = new LectorPuntosJson();
     private final LectorPuntosExcel lectorExcel = new LectorPuntosExcel();
     private final RepositorioServiciosMicro repositorioMicros = new RepositorioServiciosMicro();
@@ -60,29 +69,38 @@ public class VentanaPrincipal {
     private final List<ServicioMicro> rutasMicros = new ArrayList<>();
     private final Set<String> rutasMicrosVisibles = new HashSet<>();
     private static final List<String> COLORES_MICROS = List.of(
-            "#39FF14", "#FFD60A", "#FF6D00", "#D500F9", "#00E5FF",
-            "#FF2D95", "#B2FF59", "#FF9100", "#7C4DFF", "#64FFDA");
+            "#39FF14", "#FFEA00", "#FF3D00", "#E500FF", "#00F5FF",
+            "#FF1493", "#B6FF00", "#FF00A8", "#00FF85", "#FF6EC7");
     private boolean colocandoPunto;
     private boolean colocandoEvento;
     private long ultimoTick;
     private int ultimoMinutoHoraPunta = -1;
+    private boolean presentacionActiva;
+    private boolean panelVisibleAntesPresentacion = true;
+    private Button botonPanelMapa;
 
     private final AnimationTimer relojSimulacion = new AnimationTimer() {
         @Override
         public void handle(long ahora) {
-            if (ultimoTick != 0 && simulador.estaEjecutando()) {
-                simulador.avanzar((ahora - ultimoTick) / 1_000_000_000.0);
-                mapa.setVehiculos(simulador.posiciones());
-                if (grafo != null && ultimoMinutoHoraPunta != simulador.horaActualMinutos()) {
-                    PerfilHoraPunta.aplicar(grafo, simulador.horaActualMinutos());
-                    ultimoMinutoHoraPunta = simulador.horaActualMinutos();
+            try {
+                if (ultimoTick != 0 && simulador.estaEjecutando()) {
+                    simulador.avanzar((ahora - ultimoTick) / 1_000_000_000.0);
+                    mapa.setVehiculos(simulador.posiciones());
+                    if (grafo != null && ultimoMinutoHoraPunta != simulador.horaActualMinutos()) {
+                        PerfilHoraPunta.aplicar(grafo, simulador.horaActualMinutos());
+                        ultimoMinutoHoraPunta = simulador.horaActualMinutos();
+                    }
+                    lblHoraSimulada.setText("Hora simulada: "
+                            + String.format("%02d:%02d", simulador.horaActualMinutos() / 60,
+                            simulador.horaActualMinutos() % 60));
+                    lblRelojStatus.setText("Hora: "
+                            + String.format("%02d:%02d", simulador.horaActualMinutos() / 60,
+                            simulador.horaActualMinutos() % 60));
                 }
-                lblHoraSimulada.setText("Hora simulada: "
-                        + String.format("%02d:%02d", simulador.horaActualMinutos() / 60,
-                        simulador.horaActualMinutos() % 60));
-                lblRelojStatus.setText("Hora: "
-                        + String.format("%02d:%02d", simulador.horaActualMinutos() / 60,
-                        simulador.horaActualMinutos() % 60));
+            } catch (RuntimeException ex) {
+                LOG.log(Level.SEVERE, "Error aislado durante el tick de simulación", ex);
+                simulador.pausar();
+                lblEstado.setText("Simulación pausada por un error; las unidades conservan su estado.");
             }
             ultimoTick = ahora;
         }
@@ -91,9 +109,22 @@ public class VentanaPrincipal {
     public VentanaPrincipal() {
         root.getStyleClass().add("root-view");
         root.setCenter(mapa);
-        root.setTop(crearToolbar());
-        root.setLeft(crearMenuAcordeon());
-        root.setBottom(crearStatusBar());
+        barraSuperior.getChildren().setAll(crearToolbar());
+        root.setTop(barraSuperior);
+        root.setLeft(crearPanelPestanas());
+        barraEstado = crearStatusBar();
+        root.setBottom(barraEstado);
+        root.setFocusTraversable(true);
+        root.addEventFilter(KeyEvent.KEY_PRESSED, evento -> {
+            if (evento.getCode() == KeyCode.TAB) {
+                alternarPanelLateral();
+                evento.consume();
+            } else if (evento.getCode() == KeyCode.F11
+                    || (presentacionActiva && evento.getCode() == KeyCode.ESCAPE)) {
+                alternarPresentacion();
+                evento.consume();
+            }
+        });
 
         chkIdaNeon.setOnAction(e -> actualizarVisualizacionRutas());
         chkVueltaNeon.setOnAction(e -> actualizarVisualizacionRutas());
@@ -105,19 +136,25 @@ public class VentanaPrincipal {
         pasajerosSimulados.valueProperty().addListener((obs, antes, despues) -> actualizarResumenPasajeros());
         tipoEvento.getItems().setAll(TipoEvento.values());
         tipoEvento.getSelectionModel().selectFirst();
+        velocidadSimulacion.getItems().setAll(0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0);
+        velocidadSimulacion.setPrefWidth(88);
+        velocidadSimulacion.getSelectionModel().select(Double.valueOf(1.0));
         velocidadSimulacion.valueProperty().addListener((obs, anterior, valor) -> {
-            simulador.setVelocidadSimulacion(valor.doubleValue());
-            lblEstado.setText(String.format("Velocidad de simulación: %.2fx", valor.doubleValue()));
+            if (valor == null) return;
+            simulador.setVelocidadSimulacion(valor);
+            lblEstado.setText(String.format("Velocidad de simulación: %.1fx", valor));
         });
 
         mapa.setOnMapaCargado(() -> {
             grafo = mapa.getGrafo();
+            simulador.configurarGrafo(grafo);
             lblEstado.setText("Red lista: " + grafo.numNodos() + " nodos, "
                     + grafo.numEdges() + " tramos.");
             cargarPuntosDesdeRecurso();
             cargarRutasMicrosGuardadas();
         });
         mapa.setOnError(msg -> lblEstado.setText(msg));
+        gestorEventos.agregarListener(this::procesarEventosActualizados);
         mapa.setOnClic(this::procesarClicMapa);
         mapa.setOnMouseMoveCallback(lonlat -> {
             lblCoords.setText(String.format("Long.: %.5f  Lat.: %.5f", lonlat[0], lonlat[1]));
@@ -127,48 +164,124 @@ public class VentanaPrincipal {
         actualizarHoraPrevia();
     }
 
-    private HBox crearToolbar() {
-        HBox bar = new HBox(10);
-        bar.setPadding(new Insets(10, 14, 10, 14));
-        bar.setAlignment(Pos.CENTER_LEFT);
-        bar.getStyleClass().add("toolbar");
-        Label titulo = new Label("TRAFIQUEISHON / SIMULADOR DE BUSES");
+    private VBox crearToolbar() {
+        Menu archivo = new Menu("Archivo");
+        MenuItem importar = new MenuItem("Importar ubicaciones JSON");
+        importar.setOnAction(e -> ejecutarSeguro("importar JSON", this::cargarPuntosJson));
+        MenuItem importarExcel = new MenuItem("Importar ubicaciones Excel");
+        importarExcel.setOnAction(e -> ejecutarSeguro("importar Excel", this::cargarPuntosExcel));
+        MenuItem plantilla = new MenuItem("Crear plantilla Excel");
+        plantilla.setOnAction(e -> ejecutarSeguro("crear plantilla",
+                this::crearPlantillaExcel));
+        MenuItem guardar = new MenuItem("Guardar ubicaciones JSON");
+        guardar.setOnAction(e -> ejecutarSeguro("guardar ubicaciones", this::guardarPuntos));
+        archivo.getItems().addAll(importar, importarExcel, plantilla,
+                new SeparatorMenuItem(), guardar);
+
+        Menu simulacionMenu = new Menu("Simulación");
+        MenuItem iniciar = new MenuItem("Iniciar / continuar");
+        iniciar.setOnAction(e -> ejecutarSeguro("iniciar simulación",
+                this::iniciarOReanudarSimulacion));
+        MenuItem pausar = new MenuItem("Pausar");
+        pausar.setOnAction(e -> ejecutarSeguro("pausar simulación", this::pausarSimulacion));
+        MenuItem detener = new MenuItem("Detener / reiniciar");
+        detener.setOnAction(e -> ejecutarSeguro("detener simulación", this::detenerSimulacion));
+        simulacionMenu.getItems().addAll(iniciar, pausar, detener);
+
+        Menu vistas = new Menu("Vistas");
+        MenuItem alternarPanel = new MenuItem("Mostrar / ocultar (Tab)");
+        alternarPanel.setOnAction(e -> alternarPanelLateral());
+        MenuItem presentacion = new MenuItem("Modo presentación (F11)");
+        presentacion.setOnAction(e -> alternarPresentacion());
+        MenuItem vistaCompleta = new MenuItem("Ajustar mapa");
+        vistaCompleta.setOnAction(e -> ejecutarSeguro("ajustar mapa", mapa::resetVistaPublico));
+        vistas.getItems().addAll(alternarPanel, presentacion,
+                new SeparatorMenuItem(), vistaCompleta);
+
+        Menu ayuda = new Menu("Ayuda");
+        MenuItem teclado = new MenuItem("Atajos: Tab panel · F11 presentación · Esc salir");
+        teclado.setDisable(true);
+        ayuda.getItems().add(teclado);
+        MenuBar menuBar = new MenuBar(archivo, simulacionMenu, vistas, ayuda);
+
+        HBox controles = new HBox(8);
+        controles.setPadding(new Insets(7, 12, 7, 12));
+        controles.setAlignment(Pos.CENTER_LEFT);
+        controles.getStyleClass().add("toolbar");
+        Label titulo = new Label("TRAFIQUEISHON");
         titulo.getStyleClass().add("tab-titulo");
+        Button play = new Button("▶");
+        play.setTooltip(new Tooltip("Iniciar / continuar"));
+        play.setOnAction(e -> ejecutarSeguro("iniciar simulación",
+                this::iniciarOReanudarSimulacion));
+        Button pause = new Button("⏸");
+        pause.setTooltip(new Tooltip("Pausar"));
+        pause.setOnAction(e -> ejecutarSeguro("pausar simulación", this::pausarSimulacion));
+        Button stop = new Button("⏹");
+        stop.setTooltip(new Tooltip("Detener y limpiar"));
+        stop.setOnAction(e -> ejecutarSeguro("detener simulación", this::detenerSimulacion));
+        Button reset = new Button("↺");
+        reset.setTooltip(new Tooltip("Reiniciar simulación"));
+        reset.setOnAction(e -> ejecutarSeguro("reiniciar simulación", () -> {
+            limpiarSimulacion(false);
+            iniciarSimulacion();
+        }));
+        botonPanelMapa = new Button("Solo mapa");
+        botonPanelMapa.setOnAction(e -> alternarPanelLateral());
+        Button zoomOut = new Button("−");
+        zoomOut.setOnAction(e -> mapa.zoomOut());
+        Button zoomIn = new Button("+");
+        zoomIn.setOnAction(e -> mapa.zoomIn());
         Region espacio = new Region();
         HBox.setHgrow(espacio, Priority.ALWAYS);
-        Button zoomOut = new Button("−");
-        Button zoomIn = new Button("+");
-        Button reset = new Button("Vista completa");
-        Button plaza = new Button("Plaza");
-        Button terminal = new Button("Terminal");
-        zoomOut.setOnAction(e -> mapa.zoomOut());
-        zoomIn.setOnAction(e -> mapa.zoomIn());
-        reset.setOnAction(e -> mapa.resetVistaPublico());
-        plaza.setOnAction(e -> mapa.centrarEn(-70.133, -15.499, 4));
-        terminal.setOnAction(e -> mapa.centrarEn(-70.140, -15.490, 4));
-        bar.getChildren().addAll(titulo, espacio, zoomOut, zoomIn, reset,
-                new Separator(), plaza, terminal);
-        return bar;
+        controles.getChildren().addAll(titulo, new Separator(), play, pause, stop, reset,
+                new Label("Velocidad"), velocidadSimulacion, botonPanelMapa, espacio,
+                lblRelojStatus, lblCoords, lblZoom, zoomOut, zoomIn);
+        return new VBox(menuBar, controles);
     }
 
-    private ScrollPane crearMenuAcordeon() {
-        Accordion acordeon = new Accordion();
-        acordeon.setPrefWidth(330);
-        acordeon.getStyleClass().add("panel-lateral");
-        TitledPane ubicaciones = new TitledPane("Ubicaciones", crearPanelPuntos());
-        TitledPane trayectos = new TitledPane("Trayectos", crearPanelTrayectos());
-        TitledPane flota = new TitledPane("Rutas y micros disponibles", crearPanelFlota());
-        TitledPane pasajeros = new TitledPane("Pasajeros", crearPanelPasajeros());
-        TitledPane simulacion = new TitledPane("Simulación de buses", crearPanelSimulacion());
-        TitledPane eventos = new TitledPane("Eventos y mapa de calor", crearPanelEventos());
-        acordeon.getPanes().addAll(ubicaciones, trayectos, flota, pasajeros, simulacion, eventos);
-        acordeon.setExpandedPane(ubicaciones);
-        ScrollPane desplazamiento = new ScrollPane(acordeon);
-        desplazamiento.setFitToWidth(true);
-        desplazamiento.setPrefWidth(350);
-        desplazamiento.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        desplazamiento.getStyleClass().add("panel-lateral");
-        return desplazamiento;
+    private TabPane crearPanelPestanas() {
+        panelLateral.setPrefWidth(350);
+        panelLateral.getStyleClass().add("panel-lateral");
+        panelLateral.getTabs().addAll(
+                pestana("📍 Puntos", crearPanelPuntos()),
+                pestana("🛣 Rutas", new VBox(8, crearPanelTrayectos(), crearPanelFlota())),
+                pestana("👥 Pasajeros", crearPanelPasajeros()),
+                pestana("🚌 Simular", crearPanelSimulacion()),
+                pestana("⚡ Eventos", crearPanelEventos()));
+        return panelLateral;
+    }
+
+    private Tab pestana(String titulo, VBox contenido) {
+        ScrollPane scroll = new ScrollPane(contenido);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        Tab tab = new Tab(titulo, scroll);
+        tab.setClosable(false);
+        return tab;
+    }
+
+    private void alternarPanelLateral() {
+        boolean mostrar = root.getLeft() == null;
+        root.setLeft(mostrar ? panelLateral : null);
+        if (botonPanelMapa != null) botonPanelMapa.setText(mostrar ? "Solo mapa" : "Panel");
+    }
+
+    private void alternarPresentacion() {
+        presentacionActiva = !presentacionActiva;
+        if (presentacionActiva) {
+            panelVisibleAntesPresentacion = root.getLeft() != null;
+            root.setTop(null);
+            root.setLeft(null);
+            root.setBottom(null);
+        } else {
+            root.setTop(barraSuperior);
+            root.setLeft(panelVisibleAntesPresentacion ? panelLateral : null);
+            root.setBottom(barraEstado);
+            if (botonPanelMapa != null) {
+                botonPanelMapa.setText(panelVisibleAntesPresentacion ? "Solo mapa" : "Panel");
+            }
+        }
     }
 
     private VBox panelBase(String titulo) {
@@ -255,31 +368,66 @@ public class VentanaPrincipal {
         pasajerosSimulados.setEditable(true);
         panel.getChildren().addAll(new Label("Pasajeros que esperan abordar"),
                 pasajerosSimulados, resumenPasajeros,
-                new Label("Máximo 18 pasajeros por micro despachada."));
+                new Label("Factores de demanda: mañana 2.5x · mediodía 1.8x · tarde 2.8x · "
+                        + "noche 0.2x."),
+                new Label("Capacidad máxima: 18 pasajeros por micro despachada."));
         actualizarResumenPasajeros();
         return panel;
     }
 
     private VBox crearPanelSimulacion() {
         VBox panel = panelBase("Simulación en tiempo real");
-        velocidadSimulacion.setShowTickLabels(true);
-        velocidadSimulacion.setMajorTickUnit(2);
         Button iniciar = boton("Iniciar simulación", this::iniciarSimulacion);
-        Button detener = boton("Detener simulación", () -> {
-            simulador.detener();
-            mapa.setVehiculos(List.of());
-            lblEstado.setText("Simulación detenida.");
-        });
+        Button pausar = boton("Pausar simulación", this::pausarSimulacion);
+        Button detener = boton("Detener simulación", this::detenerSimulacion);
         panel.getChildren().addAll(new Label("Hora inicial (salidas desde paraderos)"),
                 new HBox(6, new Label("Hora"), horaInicio, new Label("Minuto"), minutoInicio),
-                lblHoraSimulada, new Label("Velocidad del reloj"), velocidadSimulacion,
-                chkIdaNeon, chkVueltaNeon, iniciar, detener);
+                lblHoraSimulada, chkIdaNeon, chkVueltaNeon, iniciar, pausar, detener);
         return panel;
     }
 
+    private void iniciarOReanudarSimulacion() {
+        if (simulador.haySimulacion()) {
+            simulador.reanudar();
+            lblEstado.setText("Simulación reanudada.");
+        } else {
+            iniciarSimulacion();
+        }
+    }
+
+    private void pausarSimulacion() {
+        simulador.pausar();
+        lblEstado.setText("Simulación pausada.");
+    }
+
+    private void detenerSimulacion() {
+        limpiarSimulacion(true);
+    }
+
+    private void limpiarSimulacion(boolean mostrarResultados) {
+        int transportados = simulador.pasajerosTransportados();
+        double ocupacion = simulador.ocupacionPromedio() * 100;
+        int incidencias = simulador.vehiculosConIncidencia();
+        boolean habiaSimulacion = simulador.haySimulacion();
+        simulador.limpiar();
+        mapa.setVehiculos(List.of());
+        lblEstado.setText("Simulación detenida y estado reiniciado.");
+        if (mostrarResultados && habiaSimulacion) {
+            Alert resultados = new Alert(Alert.AlertType.INFORMATION);
+            resultados.setTitle("Resultados de simulación");
+            resultados.setHeaderText("Resumen de la ejecución");
+            resultados.setContentText("Abordajes simulados: " + transportados
+                    + "\nOcupación media de la flota: " + String.format("%.1f%%", ocupacion)
+                    + "\nVehículos con ruta pendiente o avería: " + incidencias
+                    + "\nTiempo simulado: " + String.format("%.1f min",
+                    simulador.segundosTranscurridos() / 60));
+            resultados.show();
+        }
+    }
+
     private void actualizarResumenPasajeros() {
-        resumenPasajeros.setText("Demanda por ruta: " + pasajerosSimulados.getValue()
-                + " pasajeros; se despachan hasta 18 por salida.");
+        resumenPasajeros.setText("Demanda base por ruta: " + pasajerosSimulados.getValue()
+                + " pasajeros; ajustada por la hora del día.");
     }
 
     private void actualizarHoraPrevia() {
@@ -307,19 +455,31 @@ public class VentanaPrincipal {
     }
 
     private void crearRutaMicro() {
+        editarRutaMicro(null);
+    }
+
+    private void editarRutaMicro(ServicioMicro existente) {
         if (grafo == null || puntos.size() < 2) {
             lblEstado.setText("Carga al menos dos paraderos antes de definir una ruta.");
             return;
         }
         Dialog<Boolean> dialogo = new Dialog<>();
-        dialogo.setTitle("Definir ruta preestablecida");
-        dialogo.setHeaderText("Selecciona los paraderos en el orden mostrado; el micro saldrá del primero.");
-        ButtonType guardar = new ButtonType("Crear ruta", ButtonBar.ButtonData.OK_DONE);
+        dialogo.setTitle(existente == null ? "Crear ruta de micro" : "Editar ruta de micro");
+        dialogo.setHeaderText("Configura la línea, sus paraderos, frecuencia y color fluorescente.");
+        ButtonType guardar = new ButtonType("Guardar ruta", ButtonBar.ButtonData.OK_DONE);
         dialogo.getDialogPane().getButtonTypes().addAll(guardar, ButtonType.CANCEL);
 
-        TextField nombre = new TextField("Micro " + (rutasMicros.size() + 1));
-        Spinner<Integer> frecuencia = new Spinner<>(1, 180, 10);
-        Spinner<Integer> unidades = new Spinner<>(1, 50, 4);
+        TextField nombre = new TextField(existente == null
+                ? "Micro " + (rutasMicros.size() + 1) : existente.nombre());
+        Spinner<Integer> frecuencia = new Spinner<>(1, 180,
+                existente == null ? 10 : existente.frecuenciaMinutos());
+        Spinner<Integer> unidades = new Spinner<>(1, 50,
+                existente == null ? 4 : existente.unidadesDisponibles());
+        Spinner<Integer> pasajeros = new Spinner<>(0, 900,
+                existente == null ? pasajerosSimulados.getValue()
+                        : existente.pasajerosEsperando());
+        ColorPicker color = new ColorPicker(Color.web(existente == null
+                ? siguienteColorMicro() : existente.color()));
         ListView<PuntoImportante> disponibles = new ListView<>();
         disponibles.getItems().setAll(puntos);
         disponibles.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
@@ -331,8 +491,8 @@ public class VentanaPrincipal {
                 setText(vacio || punto == null ? null : punto.nombre());
             }
         });
-        ListView<PuntoImportante> secuencia = new ListView<>(
-                FXCollections.observableArrayList());
+        ListView<PuntoImportante> secuencia = new ListView<>(FXCollections.observableArrayList(
+                existente == null ? List.of() : existente.trayecto().puntos()));
         secuencia.setPrefHeight(230);
         secuencia.setCellFactory(list -> new ListCell<>() {
             @Override
@@ -376,8 +536,12 @@ public class VentanaPrincipal {
         contenido.addRow(0, new Label("Nombre de micro/ruta"), nombre);
         contenido.addRow(1, new Label("Frecuencia (minutos)"), frecuencia);
         contenido.addRow(2, new Label("Unidades de la ruta"), unidades);
-        contenido.add(new Label("El orden de la derecha define la ruta (mínimo 2)"), 0, 3);
-        contenido.add(selectorParaderos, 0, 4, 2, 1);
+        contenido.addRow(3, new Label("Demanda de pasajeros"), pasajeros);
+        contenido.addRow(4, new Label("Color único de ruta"), color);
+        contenido.add(new Label(
+                "Terminales: dos puntos más alejados; ajusta el orden de las paradas (mínimo 2)"),
+                0, 5);
+        contenido.add(selectorParaderos, 0, 6, 2, 1);
         dialogo.getDialogPane().setContent(contenido);
         dialogo.setResultConverter(boton -> boton == guardar);
         Optional<Boolean> confirmado = dialogo.showAndWait();
@@ -390,7 +554,15 @@ public class VentanaPrincipal {
             return;
         }
         try {
-            String id = "micro-" + java.util.UUID.randomUUID();
+            String id = existente == null ? "micro-" + java.util.UUID.randomUUID()
+                    : existente.id();
+            String colorHex = colorHex(color.getValue());
+            boolean colorEnUso = rutasMicros.stream().anyMatch(ruta ->
+                    !ruta.id().equals(id) && ruta.color().equalsIgnoreCase(colorHex));
+            if (colorEnUso) {
+                mostrarError("Color repetido", "Cada ruta de micro necesita un color distinto.");
+                return;
+            }
             CalculadorTrayecto calculador = new CalculadorTrayecto(grafo);
             Trayecto trayecto = calculador.calcularOrdenOptimo(id, rutaNombre,
                     "Trafiqueishon", "SERVICIO", seleccionados);
@@ -399,26 +571,43 @@ public class VentanaPrincipal {
             Trayecto vuelta = calculador.calcular(id + "-vuelta",
                     rutaNombre + " · vuelta", "Trafiqueishon", "SERVICIO_VUELTA",
                     puntosVuelta);
-            String color = colorMicro(rutasMicros.size());
             ServicioMicro servicio = new ServicioMicro(id, rutaNombre, trayecto, vuelta,
-                    frecuencia.getValue(), unidades.getValue(), pasajerosSimulados.getValue(), color);
-            rutasMicros.add(servicio);
-            rutasMicrosVisibles.add(id);
+                    frecuencia.getValue(), unidades.getValue(), pasajeros.getValue(), colorHex);
+            if (existente == null) {
+                rutasMicros.add(servicio);
+                rutasMicrosVisibles.add(id);
+            } else {
+                int indice = rutasMicros.indexOf(existente);
+                rutasMicros.set(indice, servicio);
+            }
             gestor.agregar(trayecto);
+            gestor.eliminar(id + "-vuelta");
             actualizarFilasRutasMicro();
             actualizarVisualizacionRutas();
             guardarRutasMicros();
             lblEstado.setText(rutaNombre + ": " + seleccionados.size() + " paraderos, cada "
-                    + frecuencia.getValue() + " min, sale de " + seleccionados.getFirst().nombre()
+                    + frecuencia.getValue() + " min, inicia en "
+                    + trayecto.puntos().getFirst().nombre()
                     + " · " + trayecto.resumen());
         } catch (RuntimeException ex) {
-            lblEstado.setText("No se pudo crear la ruta: " + ex.getMessage());
+            lblEstado.setText("No se pudo guardar la ruta: " + ex.getMessage());
         }
     }
 
-    private String colorMicro(int indice) {
-        if (indice < COLORES_MICROS.size()) return COLORES_MICROS.get(indice);
-        Color color = Color.hsb((indice * 137.508) % 360, 0.9, 1.0);
+    private String siguienteColorMicro() {
+        Set<String> usados = rutasMicros.stream()
+                .map(ruta -> ruta.color().toUpperCase()).collect(java.util.stream.Collectors.toSet());
+        for (String candidato : COLORES_MICROS) {
+            if (!usados.contains(candidato)) return candidato;
+        }
+        for (int i = 0; i < 360; i++) {
+            String candidato = colorHex(Color.hsb(i, 1, 1));
+            if (!usados.contains(candidato)) return candidato;
+        }
+        throw new IllegalStateException("No se encontró un color libre para la ruta.");
+    }
+
+    private String colorHex(Color color) {
         return String.format("#%02X%02X%02X", (int) Math.round(color.getRed() * 255),
                 (int) Math.round(color.getGreen() * 255),
                 (int) Math.round(color.getBlue() * 255));
@@ -445,6 +634,8 @@ public class VentanaPrincipal {
                 else rutasMicrosVisibles.remove(ruta.id());
                 actualizarVisualizacionRutas();
             });
+            Button editar = new Button("Editar");
+            editar.setOnAction(e -> editarRutaMicro(ruta));
             Button eliminar = new Button("×");
             eliminar.setOnAction(e -> {
                 rutasMicros.remove(ruta);
@@ -455,7 +646,7 @@ public class VentanaPrincipal {
                 guardarRutasMicros();
             });
             VBox informacion = new VBox(3, visible, recorrido);
-            HBox fila = new HBox(6, informacion, eliminar);
+            HBox fila = new HBox(6, informacion, editar, eliminar);
             fila.setAlignment(Pos.CENTER_LEFT);
             HBox.setHgrow(informacion, Priority.ALWAYS);
             filasRutasMicros.getChildren().add(fila);
@@ -486,6 +677,7 @@ public class VentanaPrincipal {
 
     private void cargarRutasMicrosGuardadas() {
         try {
+            boolean repararColores = false;
             for (RepositorioServiciosMicro.RutaGuardada guardada : repositorioMicros.cargar()) {
                 try {
                     CalculadorTrayecto calculador = new CalculadorTrayecto(grafo);
@@ -496,10 +688,16 @@ public class VentanaPrincipal {
                     Trayecto vuelta = calculador.calcular(guardada.id() + "-vuelta",
                             guardada.nombre() + " · vuelta", "Trafiqueishon",
                             "SERVICIO_VUELTA", paraderosVuelta);
+                    String colorGuardado = colorHex(Color.web(guardada.color()));
+                    String color = colorGuardado;
+                    if (rutasMicros.stream().anyMatch(r -> r.color().equalsIgnoreCase(colorGuardado))) {
+                        color = siguienteColorMicro();
+                        repararColores = true;
+                    }
                     ServicioMicro servicio = new ServicioMicro(guardada.id(), guardada.nombre(),
                             ida, vuelta, guardada.frecuenciaMinutos(),
                             guardada.unidadesDisponibles(), guardada.pasajerosEsperando(),
-                            guardada.color());
+                            color);
                     rutasMicros.add(servicio);
                     rutasMicrosVisibles.add(servicio.id());
                     gestor.agregar(ida);
@@ -510,6 +708,7 @@ public class VentanaPrincipal {
             }
             actualizarFilasRutasMicro();
             actualizarVisualizacionRutas();
+            if (repararColores) guardarRutasMicros();
             if (!rutasMicros.isEmpty()) {
                 lblEstado.setText("Rutas de micros restauradas: " + rutasMicros.size());
             }
@@ -534,8 +733,17 @@ public class VentanaPrincipal {
     private Button boton(String texto, Runnable accion) {
         Button boton = new Button(texto);
         boton.setMaxWidth(Double.MAX_VALUE);
-        boton.setOnAction(evento -> accion.run());
+        boton.setOnAction(evento -> ejecutarSeguro("acción '" + texto + "'", accion));
         return boton;
+    }
+
+    private void ejecutarSeguro(String operacion, Runnable accion) {
+        try {
+            accion.run();
+        } catch (RuntimeException ex) {
+            LOG.log(Level.SEVERE, "Falló " + operacion, ex);
+            lblEstado.setText("No se pudo completar " + operacion + ": " + ex.getMessage());
+        }
     }
 
     private HBox crearStatusBar() {
@@ -543,8 +751,7 @@ public class VentanaPrincipal {
         bar.setPadding(new Insets(6, 12, 6, 12));
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.getStyleClass().add("status-bar");
-        bar.getChildren().addAll(lblRelojStatus,
-                new Separator(javafx.geometry.Orientation.VERTICAL), lblCoords,
+        bar.getChildren().addAll(lblCoords,
                 new Separator(javafx.geometry.Orientation.VERTICAL), lblZoom,
                 new Separator(javafx.geometry.Orientation.VERTICAL), lblEstado);
         return bar;
@@ -642,10 +849,9 @@ public class VentanaPrincipal {
         String nombre = nombreEvento.getText().isBlank()
                 ? tipo + " " + (eventos.size() + 1) : nombreEvento.getText().trim();
         eventos.add(new EventoTrafico(nombre, tipo, lon, lat));
-        listaEventos.getItems().setAll(eventos);
-        mapa.setEventos(eventos);
-        aplicarEventosAlGrafo();
-        lblEstado.setText("Evento agregado: " + nombre + ". Se actualizaron los costos viales.");
+        gestorEventos.publicar(eventos);
+        lblEstado.setText("Evento agregado: " + nombre
+                + ". Las rutas se recalculan sin detener la simulación.");
     }
 
     private void eliminarEvento() {
@@ -655,10 +861,17 @@ public class VentanaPrincipal {
             return;
         }
         eventos.remove(evento);
+        gestorEventos.publicar(eventos);
+        lblEstado.setText("Evento eliminado y costos recalculados.");
+    }
+
+    private void procesarEventosActualizados(List<EventoTrafico> nuevosEventos) {
+        eventos.clear();
+        eventos.addAll(nuevosEventos);
+        simulador.actualizarEventos(eventos);
         listaEventos.getItems().setAll(eventos);
         mapa.setEventos(eventos);
         aplicarEventosAlGrafo();
-        lblEstado.setText("Evento eliminado y costos recalculados.");
     }
 
     private void aplicarEventosAlGrafo() {
@@ -668,21 +881,23 @@ public class VentanaPrincipal {
             edge.factorTrafico = 1.0;
         }
         for (EventoTrafico evento : eventos) {
+            double radioEvento = switch (evento.tipo()) {
+                case VIA_CERRADA -> 35;
+                case ACCIDENTE -> 60;
+                case MANIFESTACION -> 100;
+                default -> 120;
+            };
             for (Edge edge : grafo.getEdges()) {
-                if (distanciaPuntoTramo(evento.lon(), evento.lat(), edge) > 250) continue;
-                if (evento.tipo() == TipoEvento.VIA_CERRADA) {
+                if (distanciaPuntoTramo(evento.lon(), evento.lat(), edge) > radioEvento) continue;
+                if (evento.tipo().bloqueaVia()) {
                     edge.cerrado = true;
                 } else {
-                    edge.factorTrafico = Math.max(edge.factorTrafico, evento.tipo().factor());
+                    edge.factorTrafico = Math.min(10,
+                            edge.factorTrafico * evento.tipo().factor());
                 }
             }
         }
         recalcularServiciosPorEventos();
-        if (simulador.estaEjecutando()) {
-            simulador.detener();
-            mapa.setVehiculos(List.of());
-            lblEstado.setText("Eventos aplicados. Reinicia la simulación para recalcular rutas cerradas.");
-        }
     }
 
     private void recalcularServiciosPorEventos() {
@@ -708,9 +923,13 @@ public class VentanaPrincipal {
                         + " tras el evento: " + ex.getMessage());
             }
         }
+        simulador.actualizarServicios(rutasMicros);
         actualizarFilasRutasMicro();
         actualizarVisualizacionRutas();
         guardarRutasMicros();
+        if (simulador.estaEjecutando()) {
+            lblEstado.setText("Eventos aplicados; simulación activa y rutas recalculadas con A*.");
+        }
     }
 
     private double distanciaPuntoTramo(double lon, double lat, Edge edge) {
@@ -761,7 +980,7 @@ public class VentanaPrincipal {
                 actualizadas.add(new ServicioMicro(ruta.id(), ruta.nombre(), trayectoActualizado,
                         vueltaActualizada,
                         ruta.frecuenciaMinutos(), ruta.unidadesDisponibles(),
-                        pasajerosSimulados.getValue(), ruta.color()));
+                        ruta.pasajerosEsperando(), ruta.color()));
             }
             simulador.setVelocidadSimulacion(velocidadSimulacion.getValue());
             simulador.iniciar(actualizadas, horaInicio.getValue(), minutoInicio.getValue());

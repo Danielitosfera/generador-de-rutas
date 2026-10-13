@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Trafiqueishon — generador y simulador de rutas
 
 Aplicación de escritorio JavaFX para visualizar las vías de Juliaca, editar
@@ -13,21 +12,33 @@ mvn test
 mvn javafx:run
 ```
 
+La ejecución JavaFX queda limitada a 768 MiB de heap (`-Xmx768m`) para dejar
+memoria disponible al sistema en equipos con 2 GiB de RAM. El mapa GeoJSON se
+lee por feature y las coordenadas gráficas se almacenan como `float`, reduciendo
+el uso de memoria de la geometría proyectada. La ventana usa un tamaño inicial
+de 1200×760 y el render se limita a 24 FPS.
+
 ## Uso
 
-- El menú lateral agrupa ubicaciones, trayectos, simulación y eventos en un
-  acordeón. Solo una sección permanece abierta a la vez.
+- El panel lateral está organizado en pestañas: **Puntos**, **Rutas**,
+  **Pasajeros**, **Simular** y **Eventos**. La barra superior incluye Archivo,
+  Simulación, Vistas y Ayuda, además de los controles de marcha y velocidad.
+- Pulsa **Tab** para ocultar/mostrar el panel y **F11** para entrar en modo
+  presentación; **Esc** sale de la presentación. La simulación continúa al
+  ocultar los paneles.
 - En **Ubicaciones** se pueden agregar puntos haciendo clic en el mapa o
   escribiendo coordenadas, editar/eliminar puntos e importar/exportar JSON.
   El archivo JSON usa las claves `id`, `nombre`, `x` (longitud), `y` (latitud)
   y `tipo`; también se permite importar Excel.
 - En **Trayectos** se calculan las rutas de partida y retorno con las paradas
   actuales, y se exportan a GeoJSON, GPX o CSV.
-- En **Simulación de buses** se ajusta la hora inicial y la velocidad del reloj.
-  Los sprites se dibujan únicamente desde zoom 3 para reducir el trabajo de
-  renderizado al alejarse.
-- **Pasajeros** configura la demanda de cada servicio: se asignan hasta 18
-  pasajeros por micro despachada y el excedente espera el siguiente horario.
+- En **Simular** se ajusta la hora inicial y la velocidad del reloj (0.5x,
+  1x, 2x, 5x, 10x, 20x o 30x). Los sprites se dibujan únicamente desde zoom 3;
+  cambian de color si están detenidos, averiados o sin ruta.
+- **Pasajeros** configura la demanda base de cada servicio. El modelo actual
+  ajusta la generación por salida según la hora (mañana 2.5x, mediodía 1.8x,
+  tarde 2.8x y noche 0.2x), limita el abordaje a 18 pasajeros por micro y deja
+  una espera aproximada de 15 segundos en las paradas configuradas.
 - Las rutas de **ida** y **vuelta** se dibujan encima de la red con colores
   exclusivos (azul neón y rojo neón), con borde oscuro y casillas separadas
   para mostrar/ocultar cada una. Los botones de enfoque encuadran cada ruta.
@@ -37,6 +48,9 @@ mvn javafx:run
   y ordena las paradas intermedias para minimizar el tiempo total con Dijkstra.
   Los servicios se guardan en `~/.trafiqueishon/rutas-micros.json` y se
   reconstruyen contra la red al iniciar.
+  Cada ruta se puede editar después: nombre, paraderos y orden, frecuencia,
+  cantidad de micros, demanda y color. Los colores fluorescentes se asignan
+  sin repetir y se puede seleccionar uno distinto desde el editor.
   La simulación despacha unidades desde ambos terminales a la hora indicada y
   continúa hasta lanzar la flota completa, aunque la demanda de pasajeros se
   agote. Al llegar al otro terminal, cada unidad espera un intervalo antes de
@@ -48,11 +62,15 @@ mvn javafx:run
   17:00–20:00. Los nombres de calles se dibujan en blanco con contorno oscuro
   al acercar el mapa, limitando su densidad para mantener legibilidad. La hora
   configurada y el reloj en marcha también aparecen en la barra inferior.
-- En **Eventos y mapa de calor** se agregan trancaderas, vías cerradas y
-  vendedores ambulantes. La proximidad se calcula contra el segmento vial;
-  las vías cerradas se remarcan en rojo y se excluyen al recalcular rutas. Si
-  se agrega un evento durante una simulación, esta se pausa para que pueda
-  reiniciarse con las rutas recalculadas.
+- En **Eventos** se agregan trancaderas, cierres, vendedores ambulantes,
+  lluvia, accidentes, venteos/manifestaciones, gasolineras y semáforos rotos.
+  El gestor notifica cambios a sus listeners; los cierres recalculan desvíos
+  con A* sin detener la simulación. La lluvia, las trancaderas y los semáforos
+  alteran el factor de velocidad; una gasolinera detiene la unidad durante
+  tres minutos simulados. Los cierres y accidentes se mantienen hasta eliminar
+  el evento.
+- Al detener la simulación aparece un resumen con abordajes, ocupación media
+  de la flota, unidades con incidencias y tiempo simulado.
 - El mapa admite zoom con rueda y botones, paneo con arrastre y vista completa
   con doble clic.
 
@@ -60,12 +78,10 @@ mvn javafx:run
 
 Los eventos y su estado solo duran mientras la aplicación está abierta. Las
 rutas de micros sí se guardan localmente. El mapa vial es un recurso GeoJSON
-estático incluido en el proyecto.
-La ocupación de pasajeros se representa de forma determinista para probar la
-capacidad; no modela conteos observados ni ascensos/bajadas en cada paradero.
-El planificador usa Dijkstra con los costos de tiempo actuales; la calidad de
-las estimaciones de hora punta y eventos depende de los factores configurados,
-no de mediciones de tráfico en vivo.
-=======
-# generador-de-rutas
->>>>>>> 10ecfd4e9e312f4975fce1e139b79ccffbb39ab4
+estático incluido en el proyecto. El modelo de pasajeros todavía no asigna
+origen/destino por persona ni simula ascensos y descensos en cada parada; el
+resumen no calcula tiempos promedio individuales ni cuellos de botella.
+Accidentes y manifestaciones no expiran automáticamente: se retiran desde la
+pestaña **Eventos**. La generación de demanda es una aproximación configurable,
+no usa mediciones de tráfico en vivo. El nombre del proyecto Maven es
+`generador-rutas`.

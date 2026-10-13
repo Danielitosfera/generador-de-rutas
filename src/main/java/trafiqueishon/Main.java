@@ -10,7 +10,7 @@ public class Main extends Application {
     @Override
     public void start(Stage stage) {
         VentanaPrincipal ventana = new VentanaPrincipal();
-        Scene scene = new Scene(ventana.getRoot(), 1400, 850);
+        Scene scene = new Scene(ventana.getRoot(), 1200, 760);
 
         var css = getClass().getResource("/estilos/estilo.css");
         if (css != null) {
@@ -19,6 +19,8 @@ public class Main extends Application {
 
         stage.setTitle("Trafiqueishon - Simulador de Buses");
         stage.setScene(scene);
+        stage.setMinWidth(980);
+        stage.setMinHeight(640);
         stage.setOnCloseRequest(e -> ventana.cerrar());
         stage.show();
     }

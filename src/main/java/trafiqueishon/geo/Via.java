@@ -14,8 +14,8 @@ public class Via {
     public boolean bridge;
     public String ref;
 
-    public double[] projX;
-    public double[] projY;
+    public float[] projX;
+    public float[] projY;
 
     public double minX, minY, maxX, maxY;
 

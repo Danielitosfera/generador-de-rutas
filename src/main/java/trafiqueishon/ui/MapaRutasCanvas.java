@@ -22,11 +22,13 @@ import trafiqueishon.simulacion.TipoEvento;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class MapaRutasCanvas extends Pane {
-    private static final long INTERVALO_RENDER_NANOS = 1_000_000_000L / 30;
+    private static final Logger LOG = Logger.getLogger(MapaRutasCanvas.class.getName());
+    private static final long INTERVALO_RENDER_NANOS = 1_000_000_000L / 24;
     private static final Color FONDO = Color.web("#1E1E2E");
     private static final Color COLOR_TITULO = Color.web("#89B4FA");
     private static final Color COLOR_RUTA_PRINCIPAL = Color.web("#00A8FF");
@@ -34,6 +36,10 @@ public class MapaRutasCanvas extends Pane {
     private static final Color COLOR_PUNTO = Color.web("#F9E2AF");
     private static final Color COLOR_PUNTO_BORDE = Color.web("#1E1E2E");
     private static final Color COLOR_PUNTO_TEXTO = Color.web("#CDD6F4");
+    private static final Color COLOR_INICIO_RUTA = Color.web("#39FF14");
+    private static final Color COLOR_FINAL_RUTA = Color.web("#FF3B5C");
+    private static final Color COLOR_EXTREMO_COMPARTIDO = Color.web("#FFD740");
+    private static final Color COLOR_TERMINAL = Color.web("#00E5FF");
     private static final Font FONT_TITULO = Font.font("System", 14);
     private static final Font FONT_PUNTO = Font.font("System", 11);
 
@@ -59,6 +65,8 @@ public class MapaRutasCanvas extends Pane {
 
     private final List<List<Via>> gruposVias = crearGruposVias();
     private final List<PuntoImportante> puntos = new ArrayList<>();
+    private Set<String> puntosInicioRutas = Set.of();
+    private Set<String> puntosFinalRutas = Set.of();
     private List<EventoTrafico> eventos = List.of();
     private List<PosicionVehiculo> vehiculos = List.of();
     private List<ServicioMicro> rutasMicros = List.of();
@@ -89,7 +97,11 @@ public class MapaRutasCanvas extends Pane {
             if (!necesitaRedibujar || ahora - ultimoRenderNanos < INTERVALO_RENDER_NANOS) return;
             necesitaRedibujar = false;
             ultimoRenderNanos = ahora;
-            renderizar();
+            try {
+                renderizar();
+            } catch (RuntimeException ex) {
+                LOG.log(Level.SEVERE, "Se omitió un fotograma por un error del mapa", ex);
+            }
         }
     };
 
@@ -309,13 +321,9 @@ public class MapaRutasCanvas extends Pane {
         gc.setLineCap(StrokeLineCap.ROUND);
         gc.setLineJoin(StrokeLineJoin.ROUND);
         gc.beginPath();
-        List<Nodo> nodos = new ArrayList<>();
-        for (Edge e : t.edges()) nodos.add(e.origen);
-        if (!t.edges().isEmpty()) nodos.add(t.edges().get(t.edges().size() - 1).destino());
-        for (int i = 1; i < nodos.size(); i++) {
-            Nodo a = nodos.get(i - 1), b = nodos.get(i);
-            gc.moveTo(pantallaX(a.x), pantallaY(a.y));
-            gc.lineTo(pantallaX(b.x), pantallaY(b.y));
+        for (Edge edge : t.edges()) {
+            gc.moveTo(pantallaX(edge.origen.x), pantallaY(edge.origen.y));
+            gc.lineTo(pantallaX(edge.destino.x), pantallaY(edge.destino.y));
         }
         gc.setStroke(Color.web("#10111A"));
         gc.setLineWidth(10);
@@ -382,14 +390,49 @@ public class MapaRutasCanvas extends Pane {
             double ny = (proyector.getMaxLat() - p.lat()) / proyector.getAltoGeo();
             double px = pantallaX(nx);
             double py = pantallaY(ny);
-            gc.setFill(COLOR_PUNTO);
-            gc.fillOval(px - 6, py - 6, 12, 12);
+            boolean inicio = puntosInicioRutas.contains(p.id())
+                    || p.tipo() == PuntoImportante.TipoPunto.ORIGEN;
+            boolean fin = puntosFinalRutas.contains(p.id())
+                    || p.tipo() == PuntoImportante.TipoPunto.DESTINO;
+            boolean terminal = p.tipo() == PuntoImportante.TipoPunto.TERMINAL;
+            Color color = inicio && fin ? COLOR_EXTREMO_COMPARTIDO
+                    : inicio ? COLOR_INICIO_RUTA
+                    : fin ? COLOR_FINAL_RUTA
+                    : terminal ? COLOR_TERMINAL : COLOR_PUNTO;
+            double radio = inicio || fin || terminal ? 8 : 6;
+            gc.setFill(color);
+            gc.fillOval(px - radio, py - radio, radio * 2, radio * 2);
             gc.setStroke(COLOR_PUNTO_BORDE);
-            gc.setLineWidth(2);
-            gc.strokeOval(px - 6, py - 6, 12, 12);
+            gc.setLineWidth(inicio || fin || terminal ? 2.5 : 2);
+            gc.strokeOval(px - radio, py - radio, radio * 2, radio * 2);
             gc.setFill(COLOR_PUNTO_TEXTO);
-            gc.fillText(p.nombre(), px + 8, py - 6);
+            String etiqueta = inicio && fin ? "INICIO/FINAL · " + p.nombre()
+                    : inicio ? "INICIO · " + p.nombre()
+                    : fin ? "FINAL · " + p.nombre()
+                    : p.nombre();
+            gc.fillText(etiqueta, px + radio + 2, py - 6);
         }
+    }
+
+    private void actualizarExtremosRutas() {
+        Set<String> inicios = new HashSet<>();
+        Set<String> finales = new HashSet<>();
+        boolean hayRutasActivas = false;
+        for (ServicioMicro ruta : rutasMicros) {
+            if (!rutasMicrosVisibles.contains(ruta.id())) continue;
+            agregarExtremos(ruta.trayecto(), inicios, finales);
+            hayRutasActivas = true;
+        }
+        if (!hayRutasActivas) agregarExtremos(trayectoPartida, inicios, finales);
+        puntosInicioRutas = Set.copyOf(inicios);
+        puntosFinalRutas = Set.copyOf(finales);
+    }
+
+    private static void agregarExtremos(Trayecto trayecto, Set<String> inicios,
+                                        Set<String> finales) {
+        if (trayecto == null || trayecto.puntos().isEmpty()) return;
+        inicios.add(trayecto.puntos().getFirst().id());
+        finales.add(trayecto.puntos().getLast().id());
     }
 
     private void dibujarMapaCalor(GraphicsContext gc) {
@@ -416,9 +459,14 @@ public class MapaRutasCanvas extends Pane {
             double nx = (evento.lon() - proyector.getMinLon()) / proyector.getAnchoGeo();
             double ny = (proyector.getMaxLat() - evento.lat()) / proyector.getAltoGeo();
             double px = pantallaX(nx), py = pantallaY(ny);
-            gc.setFill(evento.tipo() == TipoEvento.VIA_CERRADA
-                    ? Color.RED : evento.tipo() == TipoEvento.TRANCADERA
-                    ? Color.ORANGE : Color.MEDIUMSEAGREEN);
+            Color colorEvento = switch (evento.tipo()) {
+                case VIA_CERRADA, ACCIDENTE, MANIFESTACION -> Color.RED;
+                case TRANCADERA, SEMAFORO_ROTO -> Color.ORANGE;
+                case LLUVIA -> Color.DEEPSKYBLUE;
+                case GASOLINERA -> Color.GOLD;
+                case VENDEDORES_AMBULANTES -> Color.MEDIUMSEAGREEN;
+            };
+            gc.setFill(colorEvento);
             gc.fillOval(px - 7, py - 7, 14, 14);
             gc.setStroke(Color.WHITE);
             gc.strokeOval(px - 7, py - 7, 14, 14);
@@ -433,7 +481,14 @@ public class MapaRutasCanvas extends Pane {
             double px = pantallaX(vehiculo.x()), py = pantallaY(vehiculo.y());
             boolean bus = vehiculo.tipo() == PosicionVehiculo.TipoVehiculo.BUS;
             double ancho = bus ? 18 : 14, alto = bus ? 10 : 8;
-            Color color = vehiculo.idRuta().isBlank()
+            Color color = vehiculo.estado() == PosicionVehiculo.Estado.SIN_RUTA
+                    ? Color.RED
+                    : vehiculo.estado() == PosicionVehiculo.Estado.AVERIADO
+                    ? Color.ORANGE
+                    : vehiculo.estado() == PosicionVehiculo.Estado.DETENIDO
+                    || vehiculo.estado() == PosicionVehiculo.Estado.EN_PARADA
+                    ? Color.YELLOW
+                    : vehiculo.idRuta().isBlank()
                     ? (bus ? Color.DEEPSKYBLUE : Color.LIGHTGREEN)
                     : Color.web(vehiculo.color());
             gc.setFill(color);
@@ -596,6 +651,7 @@ public class MapaRutasCanvas extends Pane {
         Runnable actualizar = () -> {
             rutasMicros = List.copyOf(rutas);
             rutasMicrosVisibles = Set.copyOf(visibles);
+            actualizarExtremosRutas();
             redibujar();
         };
         if (Platform.isFxApplicationThread()) actualizar.run();
@@ -620,11 +676,19 @@ public class MapaRutasCanvas extends Pane {
     }
 
     public void setTrayectoPartida(Trayecto t) {
-        Platform.runLater(() -> { trayectoPartida = t; redibujar(); });
+        Platform.runLater(() -> {
+            trayectoPartida = t;
+            actualizarExtremosRutas();
+            redibujar();
+        });
     }
 
     public void setTrayectoRetorno(Trayecto t) {
-        Platform.runLater(() -> { trayectoRetorno = t; redibujar(); });
+        Platform.runLater(() -> {
+            trayectoRetorno = t;
+            actualizarExtremosRutas();
+            redibujar();
+        });
     }
 
     public void setOnMapaCargado(Runnable cb) {

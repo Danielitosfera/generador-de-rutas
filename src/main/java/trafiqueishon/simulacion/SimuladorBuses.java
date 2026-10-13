@@ -1,21 +1,34 @@
 package trafiqueishon.simulacion;
 
+import trafiqueishon.geo.GrafoVial;
+import trafiqueishon.geo.Pathfinder;
+import trafiqueishon.geo.RutaResult;
 import trafiqueishon.geo.Edge;
 import trafiqueishon.geo.Nodo;
 import trafiqueishon.ruta.Trayecto;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public final class SimuladorBuses {
+    private static final Logger LOG = Logger.getLogger(SimuladorBuses.class.getName());
     private final List<Vehiculo> vehiculos = new ArrayList<>();
     private final List<DespachoProgramado> despachos = new ArrayList<>();
+    private GrafoVial grafo;
+    private Pathfinder pathfinder;
+    private List<EventoTrafico> eventos = List.of();
     private double velocidadSimulacion = 1.0;
     private boolean ejecutando;
     private double segundosTranscurridos;
     private int horaInicioMinutos;
     private int ultimoMinutoFactorPunta = -1;
+    private int pasajerosTransportados;
 
     public void iniciar(Trayecto trayecto, int cantidad) {
         Objects.requireNonNull(trayecto, "El trayecto es obligatorio.");
@@ -27,6 +40,7 @@ public final class SimuladorBuses {
         }
         vehiculos.clear();
         despachos.clear();
+        pasajerosTransportados = 0;
         for (int i = 0; i < cantidad; i++) {
             PosicionVehiculo.TipoVehiculo tipo = i % 3 == 0
                     ? PosicionVehiculo.TipoVehiculo.MINIBUS
@@ -50,6 +64,7 @@ public final class SimuladorBuses {
         }
         vehiculos.clear();
         despachos.clear();
+        pasajerosTransportados = pasajeros;
         int pasajerosPendientes = pasajeros;
         int cantidad = buses + micros;
         for (int i = 0; i < cantidad; i++) {
@@ -72,6 +87,7 @@ public final class SimuladorBuses {
         vehiculos.clear();
         despachos.clear();
         segundosTranscurridos = 0;
+        pasajerosTransportados = 0;
         horaInicioMinutos = hora * 60 + minuto;
         ultimoMinutoFactorPunta = -1;
         for (ServicioMicro servicio : servicios) {
@@ -85,17 +101,72 @@ public final class SimuladorBuses {
         ejecutando = false;
     }
 
+    public void pausar() {
+        ejecutando = false;
+    }
+
+    public void reanudar() {
+        if (!vehiculos.isEmpty() || !despachos.isEmpty()) ejecutando = true;
+    }
+
     public void limpiar() {
         detener();
         vehiculos.clear();
         despachos.clear();
+        pasajerosTransportados = 0;
+    }
+
+    public void configurarGrafo(GrafoVial grafo) {
+        this.grafo = Objects.requireNonNull(grafo);
+        this.pathfinder = new Pathfinder(grafo);
+        this.pathfinder.setModo(Pathfinder.Modo.A_ESTRELLA);
+    }
+
+    public void actualizarServicios(List<ServicioMicro> servicios) {
+        Map<String, ServicioMicro> porId = servicios.stream()
+                .collect(java.util.stream.Collectors.toMap(ServicioMicro::id, servicio -> servicio,
+                        (primero, ultimo) -> ultimo));
+        for (DespachoProgramado despacho : despachos) {
+            ServicioMicro actualizado = porId.get(despacho.servicio.id());
+            if (actualizado != null) despacho.servicio = actualizado;
+        }
+        for (Vehiculo vehiculo : vehiculos) {
+            ServicioMicro actualizado = porId.get(vehiculo.idRuta);
+            if (actualizado == null) continue;
+            vehiculo.rutaAlternativa = vehiculo.enIda
+                    ? actualizado.trayectoVuelta().edges() : actualizado.trayecto().edges();
+            vehiculo.paradasIda = nodosParadas(actualizado.trayecto());
+            vehiculo.paradasVuelta = nodosParadas(actualizado.trayectoVuelta());
+            vehiculo.paradas = vehiculo.enIda
+                    ? vehiculo.paradasIda : vehiculo.paradasVuelta;
+            vehiculo.recalcularSiCerrada(pathfinder);
+        }
+    }
+
+    public void actualizarEventos(List<EventoTrafico> eventos) {
+        this.eventos = List.copyOf(eventos);
+    }
+
+    private List<Nodo> nodosParadas(Trayecto trayecto) {
+        if (grafo == null) return List.of();
+        return trayecto.puntos().stream()
+                .map(punto -> grafo.nodoMasCercanoLonLat(punto.lon(), punto.lat()))
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     public void avanzar(double deltaSegundos) {
         if (!ejecutando || !Double.isFinite(deltaSegundos) || deltaSegundos <= 0) return;
         double delta = Math.min(deltaSegundos, 1.0) * velocidadSimulacion;
         segundosTranscurridos += delta;
-        for (Vehiculo vehiculo : vehiculos) vehiculo.avanzar(delta);
+        for (Vehiculo vehiculo : vehiculos) {
+            try {
+                vehiculo.avanzar(delta, pathfinder, eventos);
+            } catch (RuntimeException ex) {
+                vehiculo.estado = PosicionVehiculo.Estado.AVERIADO;
+                LOG.log(Level.SEVERE, "Se aisló un error en el vehículo " + vehiculo.idRuta, ex);
+            }
+        }
         procesarDespachos();
     }
 
@@ -107,12 +178,30 @@ public final class SimuladorBuses {
         return ejecutando;
     }
 
+    public boolean haySimulacion() {
+        return !vehiculos.isEmpty() || !despachos.isEmpty();
+    }
+
     public int capacidadTotal() {
         return vehiculos.stream().mapToInt(v -> v.capacidad).sum();
     }
 
     public int pasajerosAsignados() {
         return vehiculos.stream().mapToInt(v -> v.pasajeros).sum();
+    }
+
+    public int pasajerosTransportados() {
+        return pasajerosTransportados;
+    }
+
+    public double ocupacionPromedio() {
+        return vehiculos.isEmpty() ? 0 : vehiculos.stream()
+                .mapToDouble(v -> (double) v.pasajeros / v.capacidad).average().orElse(0);
+    }
+
+    public int vehiculosConIncidencia() {
+        return (int) vehiculos.stream().filter(v -> v.estado == PosicionVehiculo.Estado.SIN_RUTA
+                || v.estado == PosicionVehiculo.Estado.AVERIADO).count();
     }
 
     public double segundosTranscurridos() {
@@ -134,25 +223,42 @@ public final class SimuladorBuses {
     private void procesarDespachos() {
         for (DespachoProgramado despacho : despachos) {
             ServicioMicro servicio = despacho.servicio;
-            while (despacho.unidadesDespachadas < servicio.unidadesDisponibles()
-                    && despacho.proximoDespacho <= segundosTranscurridos) {
-                int abordados = Math.min(18, despacho.pasajerosPendientes);
-                despacho.pasajerosPendientes -= abordados;
-                boolean saleDelFinal = despacho.unidadesDespachadas % 2 == 1;
-                vehiculos.add(new Vehiculo(
-                        saleDelFinal ? servicio.trayectoVuelta().edges()
-                                : servicio.trayecto().edges(),
-                        saleDelFinal ? servicio.trayecto().edges()
-                                : servicio.trayectoVuelta().edges(),
-                        PosicionVehiculo.TipoVehiculo.MINIBUS, abordados, servicio.id(),
-                        servicio.nombre(), servicio.color(),
-                        servicio.frecuenciaMinutos() * 60.0));
-                despacho.unidadesDespachadas++;
-                if (despacho.unidadesDespachadas == 1
-                        && servicio.unidadesDisponibles() > 1) {
-                    continue;
+            try {
+                while (despacho.unidadesDespachadas < servicio.unidadesDisponibles()
+                        && despacho.proximoDespacho <= segundosTranscurridos) {
+                    int demandaNueva = (int) Math.round(despacho.demandaPorSalida
+                            * PerfilHoraPunta.factorDemanda(horaActualMinutos()));
+                    despacho.pasajerosPendientes = Math.addExact(
+                            despacho.pasajerosPendientes, demandaNueva);
+                    int abordados = Math.min(18, despacho.pasajerosPendientes);
+                    despacho.pasajerosPendientes -= abordados;
+                    boolean saleDelFinal = despacho.unidadesDespachadas % 2 == 1;
+                    Vehiculo vehiculo = new Vehiculo(
+                            saleDelFinal ? servicio.trayectoVuelta().edges()
+                                    : servicio.trayecto().edges(),
+                            saleDelFinal ? servicio.trayecto().edges()
+                                    : servicio.trayectoVuelta().edges(),
+                            PosicionVehiculo.TipoVehiculo.MINIBUS, abordados, servicio.id(),
+                            servicio.nombre(), servicio.color(),
+                            servicio.frecuenciaMinutos() * 60.0,
+                            nodosParadas(servicio.trayecto()),
+                            nodosParadas(servicio.trayectoVuelta()));
+                    vehiculo.enIda = !saleDelFinal;
+                    vehiculo.paradas = vehiculo.enIda
+                            ? vehiculo.paradasIda : vehiculo.paradasVuelta;
+                    vehiculos.add(vehiculo);
+                    pasajerosTransportados += abordados;
+                    despacho.unidadesDespachadas++;
+                    if (despacho.unidadesDespachadas == 1
+                            && servicio.unidadesDisponibles() > 1) {
+                        continue;
+                    }
+                    despacho.proximoDespacho += servicio.frecuenciaMinutos() * 60.0;
                 }
-                despacho.proximoDespacho += servicio.frecuenciaMinutos() * 60.0;
+            } catch (RuntimeException ex) {
+                despacho.unidadesDespachadas = servicio.unidadesDisponibles();
+                LOG.log(Level.SEVERE, "Se aisló un error en el despacho de " + servicio.nombre(),
+                        ex);
             }
         }
         int horaActual = horaActualMinutos();
@@ -181,15 +287,18 @@ public final class SimuladorBuses {
 
     public void setVelocidadSimulacion(double velocidadSimulacion) {
         if (!Double.isFinite(velocidadSimulacion)
-                || velocidadSimulacion < 0.25 || velocidadSimulacion > 20) {
-            throw new IllegalArgumentException("La velocidad debe estar entre 0.25x y 20x.");
+                || velocidadSimulacion < 0.5 || velocidadSimulacion > 30) {
+            throw new IllegalArgumentException("La velocidad debe estar entre 0.5x y 30x.");
         }
         this.velocidadSimulacion = velocidadSimulacion;
     }
 
     private static final class Vehiculo {
         private List<Edge> ruta;
-        private final List<Edge> rutaAlternativa;
+        private List<Edge> rutaAlternativa;
+        private List<Nodo> paradasIda = List.of();
+        private List<Nodo> paradasVuelta = List.of();
+        private List<Nodo> paradas = List.of();
         private final PosicionVehiculo.TipoVehiculo tipo;
         private final int pasajeros;
         private final int capacidad;
@@ -198,15 +307,31 @@ public final class SimuladorBuses {
         private final String color;
         private final double esperaTerminalSegundos;
         private int indiceEdge;
+        private int siguienteParada = 1;
         private double progresoMetros;
         private double esperaRestante;
+        private boolean enIda = true;
+        private PosicionVehiculo.Estado estado = PosicionVehiculo.Estado.EN_RUTA;
+        private final Set<String> gasolinerasVisitadas = new HashSet<>();
 
         private Vehiculo(List<Edge> ruta, List<Edge> rutaAlternativa,
                          PosicionVehiculo.TipoVehiculo tipo, int pasajeros,
                          String idRuta, String nombreRuta, String color,
                          double esperaTerminalSegundos) {
+            this(ruta, rutaAlternativa, tipo, pasajeros, idRuta, nombreRuta, color,
+                    esperaTerminalSegundos, List.of(), List.of());
+        }
+
+        private Vehiculo(List<Edge> ruta, List<Edge> rutaAlternativa,
+                         PosicionVehiculo.TipoVehiculo tipo, int pasajeros,
+                         String idRuta, String nombreRuta, String color,
+                         double esperaTerminalSegundos, List<Nodo> paradasIda,
+                         List<Nodo> paradasVuelta) {
             this.ruta = List.copyOf(ruta);
             this.rutaAlternativa = List.copyOf(rutaAlternativa);
+            this.paradasIda = List.copyOf(paradasIda);
+            this.paradasVuelta = List.copyOf(paradasVuelta);
+            this.paradas = this.paradasIda;
             this.tipo = tipo;
             this.pasajeros = pasajeros;
             this.capacidad = capacidad(tipo);
@@ -216,16 +341,31 @@ public final class SimuladorBuses {
             this.esperaTerminalSegundos = esperaTerminalSegundos;
         }
 
-        private void avanzar(double segundos) {
+        private void avanzar(double segundos, Pathfinder pathfinder,
+                             List<EventoTrafico> eventos) {
+            recalcularSiCerrada(pathfinder);
+            if (estado == PosicionVehiculo.Estado.SIN_RUTA
+                    || estado == PosicionVehiculo.Estado.AVERIADO) return;
+            detectarGasolinera(eventos);
             double restante = segundos;
             if (esperaRestante > 0) {
                 double espera = Math.min(esperaRestante, restante);
                 esperaRestante -= espera;
                 restante -= espera;
             }
+            if (esperaRestante <= 0 && estado == PosicionVehiculo.Estado.EN_PARADA) {
+                estado = PosicionVehiculo.Estado.EN_RUTA;
+            }
+            if (esperaRestante <= 0 && estado == PosicionVehiculo.Estado.DETENIDO) {
+                estado = PosicionVehiculo.Estado.EN_RUTA;
+            }
             while (restante > 0 && indiceEdge < ruta.size()) {
                 Edge edge = ruta.get(indiceEdge);
-                if (edge.cerrado) break;
+                if (edge.cerrado) {
+                    estado = PosicionVehiculo.Estado.SIN_RUTA;
+                    recalcularSiCerrada(pathfinder);
+                    break;
+                }
                 double velocidad = Math.max(1.0, edge.velocidadLibreMps()
                         / Math.max(1.0, edge.factorTrafico * edge.factorHoraPunta));
                 double disponible = Math.max(0, edge.longitudMetros() - progresoMetros);
@@ -233,16 +373,104 @@ public final class SimuladorBuses {
                 progresoMetros += recorrido;
                 restante -= recorrido / velocidad;
                 if (progresoMetros >= edge.longitudMetros()) {
+                    boolean paradaAlcanzada = siguienteParada < paradas.size()
+                            && edge.destino == paradas.get(siguienteParada);
+                    if (paradaAlcanzada) {
+                        siguienteParada++;
+                        estado = PosicionVehiculo.Estado.EN_PARADA;
+                        esperaRestante = Math.max(esperaRestante, 15);
+                    }
                     indiceEdge++;
                     progresoMetros = 0;
                     if (indiceEdge >= ruta.size()) {
                         ruta = rutaAlternativa;
+                        enIda = !enIda;
+                        paradas = enIda ? paradasIda : paradasVuelta;
+                        siguienteParada = 1;
                         indiceEdge = 0;
                         esperaRestante = esperaTerminalSegundos;
+                        estado = PosicionVehiculo.Estado.EN_RUTA;
                         break;
                     }
+                    if (paradaAlcanzada) break;
                 }
             }
+        }
+
+        private void detectarGasolinera(List<EventoTrafico> eventos) {
+            if (indiceEdge >= ruta.size()) return;
+            Edge edge = ruta.get(indiceEdge);
+            for (EventoTrafico evento : eventos) {
+                if (evento.tipo() != TipoEvento.GASOLINERA) continue;
+                String id = evento.nombre() + ":" + evento.lon() + ":" + evento.lat();
+                if (gasolinerasVisitadas.contains(id)
+                        || distanciaPuntoTramo(evento.lon(), evento.lat(), edge) > 12) continue;
+                gasolinerasVisitadas.add(id);
+                esperaRestante = Math.max(esperaRestante, 180);
+                estado = PosicionVehiculo.Estado.DETENIDO;
+            }
+        }
+
+        private static double distanciaPuntoTramo(double lon, double lat, Edge edge) {
+            double escalaX = 111_320 * Math.cos(Math.toRadians(lat));
+            double ax = edge.origen.lon * escalaX;
+            double ay = edge.origen.lat * 111_320;
+            double bx = edge.destino.lon * escalaX;
+            double by = edge.destino.lat * 111_320;
+            double px = lon * escalaX;
+            double py = lat * 111_320;
+            double dx = bx - ax;
+            double dy = by - ay;
+            double longitud2 = dx * dx + dy * dy;
+            double t = longitud2 == 0 ? 0
+                    : Math.clamp(((px - ax) * dx + (py - ay) * dy) / longitud2, 0, 1);
+            return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+        }
+
+        private void recalcularSiCerrada(Pathfinder pathfinder) {
+            if (pathfinder == null || ruta.isEmpty() || indiceEdge >= ruta.size()) return;
+            int bloqueada = -1;
+            for (int i = indiceEdge; i < ruta.size(); i++) {
+                if (ruta.get(i).cerrado) {
+                    bloqueada = i;
+                    break;
+                }
+            }
+            if (bloqueada < 0) {
+                if (estado == PosicionVehiculo.Estado.SIN_RUTA) {
+                    estado = PosicionVehiculo.Estado.EN_RUTA;
+                }
+                return;
+            }
+
+            Edge actual = ruta.get(indiceEdge);
+            boolean actualCerrada = actual.cerrado;
+            Nodo inicio = actualCerrada ? actual.origen : actual.destino;
+            Nodo destino = ruta.getLast().destino;
+            List<Nodo> waypointsRestantes = new ArrayList<>();
+            waypointsRestantes.add(inicio);
+            for (int i = siguienteParada; i < paradas.size(); i++) {
+                if (paradas.get(i) != inicio) waypointsRestantes.add(paradas.get(i));
+            }
+            if (waypointsRestantes.getLast() != destino) waypointsRestantes.add(destino);
+            RutaResult desvio = pathfinder.ruta(waypointsRestantes);
+            if (desvio == null || desvio.getEdges().isEmpty()) {
+                estado = PosicionVehiculo.Estado.SIN_RUTA;
+                return;
+            }
+            List<Edge> nuevaRuta = new ArrayList<>();
+            if (!actualCerrada) {
+                nuevaRuta.addAll(ruta.subList(0, indiceEdge + 1));
+                nuevaRuta.addAll(desvio.getEdges());
+                indiceEdge = nuevaRuta.size() - desvio.getEdges().size() - 1;
+            } else {
+                nuevaRuta.addAll(desvio.getEdges());
+                indiceEdge = 0;
+                progresoMetros = 0;
+            }
+            ruta = List.copyOf(nuevaRuta);
+            estado = PosicionVehiculo.Estado.EN_RUTA;
+            LOG.info(() -> "Ruta recalculada para " + idRuta + " evitando tramo bloqueado");
         }
 
         private PosicionVehiculo posicion() {
@@ -252,20 +480,22 @@ public final class SimuladorBuses {
             Nodo destino = edge.destino;
             return new PosicionVehiculo(origen.x + (destino.x - origen.x) * fraccion,
                     origen.y + (destino.y - origen.y) * fraccion, tipo, pasajeros, capacidad,
-                    idRuta, nombreRuta, color);
+                    idRuta, nombreRuta, color, estado);
         }
 
     }
 
     private static final class DespachoProgramado {
-        private final ServicioMicro servicio;
+        private ServicioMicro servicio;
+        private final int demandaPorSalida;
         private int pasajerosPendientes;
         private int unidadesDespachadas;
         private double proximoDespacho;
 
         private DespachoProgramado(ServicioMicro servicio) {
             this.servicio = servicio;
-            pasajerosPendientes = servicio.pasajerosEsperando();
+            demandaPorSalida = (int) Math.ceil((double) servicio.pasajerosEsperando()
+                    / servicio.unidadesDisponibles());
         }
     }
 }
