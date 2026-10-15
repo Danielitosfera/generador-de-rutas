@@ -9,6 +9,7 @@ import trafiqueishon.ruta.Trayecto;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -17,12 +18,17 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class SimuladorBuses {
+    public static final int MAX_UNIDADES = ServicioMicro.MAX_UNIDADES;
     private static final Logger LOG = Logger.getLogger(SimuladorBuses.class.getName());
+    private static final int MAX_DESVIOS_CACHE = 2_048;
     private final List<Vehiculo> vehiculos = new ArrayList<>();
     private final List<DespachoProgramado> despachos = new ArrayList<>();
     private GrafoVial grafo;
     private Pathfinder pathfinder;
     private List<EventoTrafico> eventos = List.of();
+    private List<EventoTrafico> gasolineras = List.of();
+    private final Map<RutaDesvioKey, List<Edge>> desviosCache = new HashMap<>();
+    private long versionRed;
     private double velocidadSimulacion = 1.0;
     private boolean ejecutando;
     private double segundosTranscurridos;
@@ -32,8 +38,9 @@ public final class SimuladorBuses {
 
     public void iniciar(Trayecto trayecto, int cantidad) {
         Objects.requireNonNull(trayecto, "El trayecto es obligatorio.");
-        if (cantidad < 1 || cantidad > 100) {
-            throw new IllegalArgumentException("La cantidad de buses debe estar entre 1 y 100.");
+        if (cantidad < 1 || cantidad > MAX_UNIDADES) {
+            throw new IllegalArgumentException("La cantidad de unidades debe estar entre 1 y "
+                    + MAX_UNIDADES + ".");
         }
         if (trayecto.edges().isEmpty()) {
             throw new IllegalArgumentException("El trayecto no contiene tramos.");
@@ -53,10 +60,14 @@ public final class SimuladorBuses {
 
     public void iniciar(Trayecto trayecto, int buses, int micros, int pasajeros) {
         Objects.requireNonNull(trayecto, "El trayecto es obligatorio.");
-        if (buses < 0 || micros < 0 || buses + micros < 1 || buses + micros > 100) {
-            throw new IllegalArgumentException("Selecciona entre 1 y 100 unidades.");
+        long totalUnidades = (long) buses + micros;
+        long capacidadFlota = (long) buses * 50 + (long) micros * 18;
+        if (buses < 0 || micros < 0 || totalUnidades < 1
+                || totalUnidades > MAX_UNIDADES) {
+            throw new IllegalArgumentException("Selecciona hasta "
+                    + MAX_UNIDADES + " unidades.");
         }
-        if (pasajeros < 0 || pasajeros > buses * 50 + micros * 18) {
+        if (pasajeros < 0 || pasajeros > capacidadFlota) {
             throw new IllegalArgumentException("Los pasajeros superan la capacidad de la flota.");
         }
         if (trayecto.edges().isEmpty()) {
@@ -66,7 +77,7 @@ public final class SimuladorBuses {
         despachos.clear();
         pasajerosTransportados = pasajeros;
         int pasajerosPendientes = pasajeros;
-        int cantidad = buses + micros;
+        int cantidad = (int) totalUnidades;
         for (int i = 0; i < cantidad; i++) {
             PosicionVehiculo.TipoVehiculo tipo = i < buses
                     ? PosicionVehiculo.TipoVehiculo.BUS : PosicionVehiculo.TipoVehiculo.MINIBUS;
@@ -81,6 +92,11 @@ public final class SimuladorBuses {
     public void iniciar(List<ServicioMicro> servicios, int hora, int minuto) {
         Objects.requireNonNull(servicios, "La lista de servicios es obligatoria.");
         if (servicios.isEmpty()) throw new IllegalArgumentException("No hay rutas de micros activas.");
+        long totalUnidades = servicios.stream().mapToLong(ServicioMicro::unidadesDisponibles).sum();
+        if (totalUnidades > MAX_UNIDADES) {
+            throw new IllegalArgumentException("La flota total no puede superar "
+                    + MAX_UNIDADES + " unidades.");
+        }
         if (hora < 0 || hora > 23 || minuto < 0 || minuto > 59) {
             throw new IllegalArgumentException("La hora de inicio no es válida.");
         }
@@ -91,7 +107,10 @@ public final class SimuladorBuses {
         horaInicioMinutos = hora * 60 + minuto;
         ultimoMinutoFactorPunta = -1;
         for (ServicioMicro servicio : servicios) {
-            despachos.add(new DespachoProgramado(servicio));
+            DespachoProgramado despacho = new DespachoProgramado(servicio);
+            despacho.paradasIda = nodosParadas(servicio.trayecto());
+            despacho.paradasVuelta = nodosParadas(servicio.trayectoVuelta());
+            despachos.add(despacho);
         }
         ejecutando = true;
         procesarDespachos();
@@ -128,7 +147,11 @@ public final class SimuladorBuses {
                         (primero, ultimo) -> ultimo));
         for (DespachoProgramado despacho : despachos) {
             ServicioMicro actualizado = porId.get(despacho.servicio.id());
-            if (actualizado != null) despacho.servicio = actualizado;
+            if (actualizado != null) {
+                despacho.servicio = actualizado;
+                despacho.paradasIda = nodosParadas(actualizado.trayecto());
+                despacho.paradasVuelta = nodosParadas(actualizado.trayectoVuelta());
+            }
         }
         for (Vehiculo vehiculo : vehiculos) {
             ServicioMicro actualizado = porId.get(vehiculo.idRuta);
@@ -139,12 +162,21 @@ public final class SimuladorBuses {
             vehiculo.paradasVuelta = nodosParadas(actualizado.trayectoVuelta());
             vehiculo.paradas = vehiculo.enIda
                     ? vehiculo.paradasIda : vehiculo.paradasVuelta;
-            vehiculo.recalcularSiCerrada(pathfinder);
         }
+        invalidarRutas();
     }
 
     public void actualizarEventos(List<EventoTrafico> eventos) {
         this.eventos = List.copyOf(eventos);
+        this.gasolineras = this.eventos.stream()
+                .filter(evento -> evento.tipo() == TipoEvento.GASOLINERA)
+                .toList();
+        invalidarRutas();
+    }
+
+    private void invalidarRutas() {
+        versionRed++;
+        desviosCache.clear();
     }
 
     private List<Nodo> nodosParadas(Trayecto trayecto) {
@@ -161,7 +193,7 @@ public final class SimuladorBuses {
         segundosTranscurridos += delta;
         for (Vehiculo vehiculo : vehiculos) {
             try {
-                vehiculo.avanzar(delta, pathfinder, eventos);
+                vehiculo.avanzar(delta, pathfinder, gasolineras, versionRed, desviosCache);
             } catch (RuntimeException ex) {
                 vehiculo.estado = PosicionVehiculo.Estado.AVERIADO;
                 LOG.log(Level.SEVERE, "Se aisló un error en el vehículo " + vehiculo.idRuta, ex);
@@ -241,8 +273,7 @@ public final class SimuladorBuses {
                             PosicionVehiculo.TipoVehiculo.MINIBUS, abordados, servicio.id(),
                             servicio.nombre(), servicio.color(),
                             servicio.frecuenciaMinutos() * 60.0,
-                            nodosParadas(servicio.trayecto()),
-                            nodosParadas(servicio.trayectoVuelta()));
+                            despacho.paradasIda, despacho.paradasVuelta);
                     vehiculo.enIda = !saleDelFinal;
                     vehiculo.paradas = vehiculo.enIda
                             ? vehiculo.paradasIda : vehiculo.paradasVuelta;
@@ -264,15 +295,17 @@ public final class SimuladorBuses {
         int horaActual = horaActualMinutos();
         if (horaActual == ultimoMinutoFactorPunta) return;
         double factorHoraPunta = PerfilHoraPunta.factor(horaActual);
-        for (DespachoProgramado despacho : despachos) {
-            for (var edge : despacho.servicio.trayecto().edges()) edge.factorHoraPunta = factorHoraPunta;
-            for (var edge : despacho.servicio.trayectoVuelta().edges()) {
-                edge.factorHoraPunta = factorHoraPunta;
+        if (grafo != null) {
+            PerfilHoraPunta.aplicar(grafo, horaActual);
+        } else {
+            for (DespachoProgramado despacho : despachos) {
+                for (var edge : despacho.servicio.trayecto().edges()) {
+                    edge.factorHoraPunta = factorHoraPunta;
+                }
+                for (var edge : despacho.servicio.trayectoVuelta().edges()) {
+                    edge.factorHoraPunta = factorHoraPunta;
+                }
             }
-        }
-        for (Vehiculo vehiculo : vehiculos) {
-            for (var edge : vehiculo.ruta) edge.factorHoraPunta = factorHoraPunta;
-            for (var edge : vehiculo.rutaAlternativa) edge.factorHoraPunta = factorHoraPunta;
         }
         ultimoMinutoFactorPunta = horaActual;
     }
@@ -312,7 +345,8 @@ public final class SimuladorBuses {
         private double esperaRestante;
         private boolean enIda = true;
         private PosicionVehiculo.Estado estado = PosicionVehiculo.Estado.EN_RUTA;
-        private final Set<String> gasolinerasVisitadas = new HashSet<>();
+        private Set<String> gasolinerasVisitadas;
+        private long versionRuta = -1;
 
         private Vehiculo(List<Edge> ruta, List<Edge> rutaAlternativa,
                          PosicionVehiculo.TipoVehiculo tipo, int pasajeros,
@@ -342,8 +376,11 @@ public final class SimuladorBuses {
         }
 
         private void avanzar(double segundos, Pathfinder pathfinder,
-                             List<EventoTrafico> eventos) {
-            recalcularSiCerrada(pathfinder);
+                             List<EventoTrafico> eventos, long versionRed,
+                             Map<RutaDesvioKey, List<Edge>> desviosCache) {
+            if (versionRuta != versionRed) {
+                recalcularSiCerrada(pathfinder, versionRed, desviosCache);
+            }
             if (estado == PosicionVehiculo.Estado.SIN_RUTA
                     || estado == PosicionVehiculo.Estado.AVERIADO) return;
             detectarGasolinera(eventos);
@@ -363,7 +400,7 @@ public final class SimuladorBuses {
                 Edge edge = ruta.get(indiceEdge);
                 if (edge.cerrado) {
                     estado = PosicionVehiculo.Estado.SIN_RUTA;
-                    recalcularSiCerrada(pathfinder);
+                    recalcularSiCerrada(pathfinder, versionRed, desviosCache);
                     break;
                 }
                 double velocidad = Math.max(1.0, edge.velocidadLibreMps()
@@ -401,10 +438,10 @@ public final class SimuladorBuses {
             if (indiceEdge >= ruta.size()) return;
             Edge edge = ruta.get(indiceEdge);
             for (EventoTrafico evento : eventos) {
-                if (evento.tipo() != TipoEvento.GASOLINERA) continue;
                 String id = evento.nombre() + ":" + evento.lon() + ":" + evento.lat();
-                if (gasolinerasVisitadas.contains(id)
+                if ((gasolinerasVisitadas != null && gasolinerasVisitadas.contains(id))
                         || distanciaPuntoTramo(evento.lon(), evento.lat(), edge) > 12) continue;
+                if (gasolinerasVisitadas == null) gasolinerasVisitadas = new HashSet<>();
                 gasolinerasVisitadas.add(id);
                 esperaRestante = Math.max(esperaRestante, 180);
                 estado = PosicionVehiculo.Estado.DETENIDO;
@@ -427,7 +464,9 @@ public final class SimuladorBuses {
             return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
         }
 
-        private void recalcularSiCerrada(Pathfinder pathfinder) {
+        private void recalcularSiCerrada(Pathfinder pathfinder, long versionRed,
+                                         Map<RutaDesvioKey, List<Edge>> desviosCache) {
+            this.versionRuta = versionRed;
             if (pathfinder == null || ruta.isEmpty() || indiceEdge >= ruta.size()) return;
             int bloqueada = -1;
             for (int i = indiceEdge; i < ruta.size(); i++) {
@@ -447,24 +486,32 @@ public final class SimuladorBuses {
             boolean actualCerrada = actual.cerrado;
             Nodo inicio = actualCerrada ? actual.origen : actual.destino;
             Nodo destino = ruta.getLast().destino;
-            List<Nodo> waypointsRestantes = new ArrayList<>();
-            waypointsRestantes.add(inicio);
-            for (int i = siguienteParada; i < paradas.size(); i++) {
-                if (paradas.get(i) != inicio) waypointsRestantes.add(paradas.get(i));
-            }
-            if (waypointsRestantes.getLast() != destino) waypointsRestantes.add(destino);
-            RutaResult desvio = pathfinder.ruta(waypointsRestantes);
-            if (desvio == null || desvio.getEdges().isEmpty()) {
-                estado = PosicionVehiculo.Estado.SIN_RUTA;
-                return;
+            RutaDesvioKey clave = new RutaDesvioKey(idRuta, inicio.id, destino.id,
+                    siguienteParada, enIda);
+            List<Edge> desvio = desviosCache.get(clave);
+            if (desvio == null) {
+                List<Nodo> waypointsRestantes = new ArrayList<>();
+                waypointsRestantes.add(inicio);
+                for (int i = siguienteParada; i < paradas.size(); i++) {
+                    if (paradas.get(i) != inicio) waypointsRestantes.add(paradas.get(i));
+                }
+                if (waypointsRestantes.getLast() != destino) waypointsRestantes.add(destino);
+                RutaResult resultado = pathfinder.ruta(waypointsRestantes);
+                if (resultado == null || resultado.getEdges().isEmpty()) {
+                    estado = PosicionVehiculo.Estado.SIN_RUTA;
+                    return;
+                }
+                desvio = resultado.getEdges();
+                if (desviosCache.size() >= MAX_DESVIOS_CACHE) desviosCache.clear();
+                desviosCache.put(clave, desvio);
             }
             List<Edge> nuevaRuta = new ArrayList<>();
             if (!actualCerrada) {
                 nuevaRuta.addAll(ruta.subList(0, indiceEdge + 1));
-                nuevaRuta.addAll(desvio.getEdges());
-                indiceEdge = nuevaRuta.size() - desvio.getEdges().size() - 1;
+                nuevaRuta.addAll(desvio);
+                indiceEdge = nuevaRuta.size() - desvio.size() - 1;
             } else {
-                nuevaRuta.addAll(desvio.getEdges());
+                nuevaRuta.addAll(desvio);
                 indiceEdge = 0;
                 progresoMetros = 0;
             }
@@ -488,6 +535,8 @@ public final class SimuladorBuses {
     private static final class DespachoProgramado {
         private ServicioMicro servicio;
         private final int demandaPorSalida;
+        private List<Nodo> paradasIda;
+        private List<Nodo> paradasVuelta;
         private int pasajerosPendientes;
         private int unidadesDespachadas;
         private double proximoDespacho;
@@ -498,4 +547,7 @@ public final class SimuladorBuses {
                     / servicio.unidadesDisponibles());
         }
     }
+
+    private record RutaDesvioKey(String rutaId, int origenId, int destinoId,
+                                 int siguienteParada, boolean ida) {}
 }

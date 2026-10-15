@@ -14,10 +14,12 @@ public record ServicioMicro(
         int pasajerosEsperando,
         String color) {
 
+    public static final int MAX_UNIDADES = 6_000;
+
     public ServicioMicro {
         if (id == null || id.isBlank() || nombre == null || nombre.isBlank()
                 || frecuenciaMinutos < 1 || frecuenciaMinutos > 180
-                || unidadesDisponibles < 1 || unidadesDisponibles > 50
+                || unidadesDisponibles < 1 || unidadesDisponibles > MAX_UNIDADES
                 || pasajerosEsperando < 0 || color == null || color.isBlank()) {
             throw new IllegalArgumentException("Configuración de ruta de micro inválida.");
         }

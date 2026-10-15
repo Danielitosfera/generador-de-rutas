@@ -32,7 +32,7 @@ class RepositorioServiciosMicroTest {
                 List.of(puntos.get(1), puntos.get(0)), List.of(edge), 100,
                 edge.costoBase, "SERVICIO_VUELTA");
         ServicioMicro servicio = new ServicioMicro("r1", "Micro Centro", ida, vuelta,
-                12, 5, 80, "#39FF14");
+                12, ServicioMicro.MAX_UNIDADES, 80, "#39FF14");
         RepositorioServiciosMicro repositorio = new RepositorioServiciosMicro(
                 temporal.resolve("rutas.json"));
 
@@ -43,7 +43,7 @@ class RepositorioServiciosMicroTest {
         assertEquals(servicio.nombre(), cargada.nombre());
         assertEquals(servicio.trayecto().puntos(), cargada.paraderos());
         assertEquals(12, cargada.frecuenciaMinutos());
-        assertEquals(5, cargada.unidadesDisponibles());
+        assertEquals(ServicioMicro.MAX_UNIDADES, cargada.unidadesDisponibles());
         assertEquals(80, cargada.pasajerosEsperando());
         assertEquals(servicio.color(), cargada.color());
     }

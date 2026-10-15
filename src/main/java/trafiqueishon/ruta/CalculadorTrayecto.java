@@ -61,14 +61,15 @@ public final class CalculadorTrayecto {
         if (unicos.size() < 2) {
             throw new IllegalArgumentException("Los paraderos deben ser distintos.");
         }
-        int[] extremos = extremosMasLejanos(unicos);
+        double[][] costo = matrizCostos(unicos);
+        int[] extremos = extremosMasLejanos(unicos, costo);
         List<Integer> intermedios = new ArrayList<>();
         for (int i = 0; i < unicos.size(); i++) {
             if (i != extremos[0] && i != extremos[1]) intermedios.add(i);
         }
         int[] orden = intermedios.size() <= 15
-                ? ordenExacto(unicos, extremos, intermedios)
-                : ordenAproximado(unicos, extremos, intermedios);
+                ? ordenExacto(extremos, intermedios, costo)
+                : ordenAproximado(extremos, intermedios, costo);
         List<PuntoImportante> ordenados = new ArrayList<>(unicos.size());
         ordenados.add(unicos.get(extremos[0]));
         for (int indice : orden) ordenados.add(unicos.get(indice));
@@ -76,39 +77,79 @@ public final class CalculadorTrayecto {
         return calcular(id, nombre, empresa, sentido, ordenados);
     }
 
-    private int[] extremosMasLejanos(List<PuntoImportante> puntos) {
-        int primero = 0, segundo = 1;
-        double mayor = -1;
+    private int[] extremosMasLejanos(List<PuntoImportante> puntos, double[][] costo) {
+        int origenMarcado = -1;
+        int destinoMarcado = -1;
+        for (int i = 0; i < puntos.size(); i++) {
+            if (origenMarcado < 0
+                    && puntos.get(i).tipo() == PuntoImportante.TipoPunto.ORIGEN) {
+                origenMarcado = i;
+            }
+            if (destinoMarcado < 0
+                    && (puntos.get(i).tipo() == PuntoImportante.TipoPunto.DESTINO
+                    || puntos.get(i).tipo() == PuntoImportante.TipoPunto.TERMINAL)) {
+                destinoMarcado = i;
+            }
+        }
+        if (origenMarcado >= 0 && destinoMarcado >= 0 && origenMarcado != destinoMarcado) {
+            return new int[]{origenMarcado, destinoMarcado};
+        }
+        if (origenMarcado >= 0) {
+            return new int[]{origenMarcado,
+                    extremoMasLejanoConectado(origenMarcado, costo, true)};
+        }
+        if (destinoMarcado >= 0) {
+            return new int[]{extremoMasLejanoConectado(destinoMarcado, costo, false),
+                    destinoMarcado};
+        }
+
+        int primero = -1, segundo = -1;
+        double mayor = Double.NEGATIVE_INFINITY;
         for (int i = 0; i < puntos.size(); i++) {
             for (int j = i + 1; j < puntos.size(); j++) {
-                double distancia = distanciaMetros(puntos.get(i), puntos.get(j));
-                if (distancia > mayor) {
-                    mayor = distancia;
+                double ida = costo[i][j];
+                double vuelta = costo[j][i];
+                if (!Double.isFinite(ida) && !Double.isFinite(vuelta)) continue;
+                double separacion = Double.isFinite(ida) && Double.isFinite(vuelta)
+                        ? ida + vuelta : Double.isFinite(ida) ? ida : vuelta;
+                if (separacion > mayor) {
+                    mayor = separacion;
                     primero = i;
                     segundo = j;
                 }
             }
         }
-        PuntoImportante a = puntos.get(primero);
-        PuntoImportante b = puntos.get(segundo);
-        if (a.tipo() == PuntoImportante.TipoPunto.DESTINO
-                || a.tipo() == PuntoImportante.TipoPunto.TERMINAL) {
-            int temporal = primero;
-            primero = segundo;
-            segundo = temporal;
-        } else if (b.tipo() == PuntoImportante.TipoPunto.ORIGEN) {
-            int temporal = primero;
-            primero = segundo;
-            segundo = temporal;
+        if (primero < 0) {
+            throw new IllegalStateException("No existe conexión vial entre los paraderos.");
+        }
+        if (Double.isFinite(costo[segundo][primero])
+                && (!Double.isFinite(costo[primero][segundo])
+                || costo[segundo][primero] < costo[primero][segundo])) {
+            return new int[]{segundo, primero};
         }
         return new int[]{primero, segundo};
     }
 
-    private int[] ordenExacto(List<PuntoImportante> puntos, int[] extremos,
-                              List<Integer> intermedios) {
+    private int extremoMasLejanoConectado(int fijo, double[][] costo, boolean esOrigen) {
+        int mejor = -1;
+        double mayor = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < costo.length; i++) {
+            if (i == fijo) continue;
+            double distancia = esOrigen ? costo[fijo][i] : costo[i][fijo];
+            if (Double.isFinite(distancia) && distancia > mayor) {
+                mayor = distancia;
+                mejor = i;
+            }
+        }
+        if (mejor < 0) {
+            throw new IllegalStateException("No existe conexión vial desde/hacia el terminal marcado.");
+        }
+        return mejor;
+    }
+
+    private int[] ordenExacto(int[] extremos, List<Integer> intermedios, double[][] costo) {
         int m = intermedios.size();
         if (m == 0) return new int[0];
-        double[][] costo = matrizCostos(puntos);
         int estados = 1 << m;
         double[][] dp = new double[estados][m];
         int[][] previo = new int[estados][m];
@@ -161,9 +202,8 @@ public final class CalculadorTrayecto {
         return resultado;
     }
 
-    private int[] ordenAproximado(List<PuntoImportante> puntos, int[] extremos,
-                                  List<Integer> intermedios) {
-        double[][] costo = matrizCostos(puntos);
+    private int[] ordenAproximado(int[] extremos, List<Integer> intermedios,
+                                  double[][] costo) {
         List<Integer> pendientes = new ArrayList<>(intermedios);
         List<Integer> recorrido = new ArrayList<>();
         int actual = extremos[0];
@@ -176,9 +216,15 @@ public final class CalculadorTrayecto {
             actual = proximo;
         }
         recorrido.add(extremos[1]);
-        boolean mejoro;
-        do {
-            mejoro = false;
+        for (int pasada = 0; pasada < 32; pasada++) {
+            double[] diferencias = new double[recorrido.size()];
+            for (int i = 0; i < recorrido.size() - 1; i++) {
+                int desde = recorrido.get(i);
+                int hasta = recorrido.get(i + 1);
+                diferencias[i + 1] = diferencias[i] + costo[hasta][desde] - costo[desde][hasta];
+            }
+            boolean mejoro = false;
+            busqueda:
             for (int i = 0; i < recorrido.size() - 2; i++) {
                 for (int j = i + 1; j < recorrido.size() - 1; j++) {
                     int antes = i == 0 ? extremos[0] : recorrido.get(i - 1);
@@ -186,14 +232,17 @@ public final class CalculadorTrayecto {
                     int hasta = recorrido.get(j);
                     int despues = recorrido.get(j + 1);
                     double anterior = costo[antes][desde] + costo[hasta][despues];
-                    double invertido = costo[antes][hasta] + costo[desde][despues];
+                    double invertido = costo[antes][hasta] + costo[desde][despues]
+                            + diferencias[j] - diferencias[i];
                     if (invertido + 1e-9 < anterior) {
                         java.util.Collections.reverse(recorrido.subList(i, j + 1));
                         mejoro = true;
+                        break busqueda;
                     }
                 }
             }
-        } while (mejoro);
+            if (!mejoro) break;
+        }
         recorrido.removeLast();
         return recorrido.stream().mapToInt(Integer::intValue).toArray();
     }
@@ -215,13 +264,4 @@ public final class CalculadorTrayecto {
         return costo;
     }
 
-    private static double distanciaMetros(PuntoImportante a, PuntoImportante b) {
-        double lat1 = Math.toRadians(a.lat());
-        double lat2 = Math.toRadians(b.lat());
-        double dLat = lat2 - lat1;
-        double dLon = Math.toRadians(b.lon() - a.lon());
-        double h = Math.pow(Math.sin(dLat / 2), 2) + Math.cos(lat1) * Math.cos(lat2)
-                * Math.pow(Math.sin(dLon / 2), 2);
-        return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
-    }
 }

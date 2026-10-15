@@ -75,4 +75,40 @@ class CalculadorTrayectoTest {
             assertEquals("p" + i, trayecto.puntos().get(i).id());
         }
     }
+
+    @Test
+    void eligeTerminalesPorDistanciaRealDeLaRedYNoSoloPorProximidadGeografica() {
+        double[] a = {-70.0, -15.0};
+        double[] b = {-69.999, -15.0};
+        double[] c = {-69.998, -15.0};
+        Via atajo = via("atajo", "trunk", a, c);
+        Via caminoAB = via("ab", "residential", a,
+                new double[]{-70.0, -15.002}, new double[]{-69.999, -15.002}, b);
+        Via caminoBC = via("bc", "residential", b,
+                new double[]{-69.999, -15.008}, new double[]{-69.998, -15.008}, c);
+        List<Via> vias = List.of(atajo, caminoAB, caminoBC);
+        Proyector proyector = new Proyector();
+        proyector.preProyectar(vias);
+        GrafoVial grafo = new GrafoVial();
+        grafo.construir(vias, proyector);
+        List<PuntoImportante> paraderos = List.of(
+                new PuntoImportante("a", "A", a[0], a[1]),
+                new PuntoImportante("b", "B", b[0], b[1]),
+                new PuntoImportante("c", "C", c[0], c[1]));
+
+        Trayecto resultado = new CalculadorTrayecto(grafo).calcularOrdenOptimo(
+                "red", "Ruta por red", "Empresa", "SERVICIO", paraderos);
+
+        assertEquals("b", resultado.puntos().getFirst().id());
+        assertEquals("c", resultado.puntos().getLast().id());
+    }
+
+    private Via via(String id, String highway, double[]... coordenadas) {
+        Via via = new Via();
+        via.id = id;
+        via.name = id;
+        via.highway = highway;
+        via.coords = java.util.Arrays.stream(coordenadas).toList();
+        return via;
+    }
 }

@@ -48,6 +48,12 @@
             <version>${jts.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>2.0.30</version>
+        </dependency>
+
         <!-- Apache POI para Excel -->
         <dependency>
             <groupId>org.apache.poi</groupId>
@@ -81,6 +87,7 @@
                         <option>-Xms128m</option>
                         <option>-Xmx768m</option>
                         <option>-XX:+UseG1GC</option>
+                        <option>-Dprism.order=es2,sw</option>
                     </options>
                 </configuration>
             </plugin>

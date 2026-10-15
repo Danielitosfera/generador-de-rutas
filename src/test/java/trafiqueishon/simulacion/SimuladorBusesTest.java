@@ -30,6 +30,17 @@ class SimuladorBusesTest {
     }
 
     @Test
+    void aceptaElLimiteDeSeisMilUnidadesEnElModoDirecto() {
+        SimuladorBuses simulador = new SimuladorBuses();
+
+        simulador.iniciar(trayecto(), 6_000);
+
+        assertEquals(6_000, simulador.posiciones().size());
+        assertThrows(IllegalArgumentException.class,
+                () -> simulador.iniciar(trayecto(), 6_001));
+    }
+
+    @Test
     void rechazaVelocidadFueraDelRangoPermitido() {
         SimuladorBuses simulador = new SimuladorBuses();
         assertThrows(IllegalArgumentException.class,
@@ -72,6 +83,22 @@ class SimuladorBusesTest {
         assertEquals(3, simulador.posiciones().size());
         assertEquals(7 * 60, simulador.horaActualMinutos());
         assertEquals(2.2, PerfilHoraPunta.factor(simulador.horaActualMinutos()));
+    }
+
+    @Test
+    void limitaElTotalDeUnidadesEntreServiciosYDespachaGradualmente() {
+        Trayecto ida = trayectoLargo();
+        Trayecto vuelta = trayectoLargoVuelta();
+        ServicioMicro servicio = new ServicioMicro("max", "Línea máxima", ida, vuelta,
+                1, SimuladorBuses.MAX_UNIDADES, 0, "#39FF14");
+        SimuladorBuses simulador = new SimuladorBuses();
+
+        simulador.iniciar(List.of(servicio), 10, 0);
+
+        assertEquals(2, simulador.posiciones().size());
+        assertThrows(IllegalArgumentException.class,
+                () -> simulador.iniciar(List.of(servicio, servicio), 10, 0));
+        assertEquals(2, simulador.posiciones().size());
     }
 
     @Test

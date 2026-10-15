@@ -10,43 +10,51 @@ import trafiqueishon.ruta.Trayecto;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 public final class ExportadorGeoJson {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
     public void exportar(Trayecto trayecto, Path destino) throws IOException {
+        exportar(List.of(new RutaExportable(trayecto.nombre(), "#00A8FF", trayecto)), destino);
+    }
+
+    public void exportar(List<RutaExportable> rutas, Path destino) throws IOException {
+        if (rutas.isEmpty()) throw new IllegalArgumentException("Selecciona al menos una ruta.");
         ObjectNode root = mapper.createObjectNode();
         root.put("type", "FeatureCollection");
-
-        ObjectNode props = mapper.createObjectNode();
-        props.put("nombre", trayecto.nombre());
-        props.put("empresa", trayecto.empresa());
-        props.put("sentido", trayecto.sentido());
-        props.put("distancia_km", trayecto.distanciaMetros() / 1000.0);
-        props.put("tiempo_min", trayecto.tiempoSegundos() / 60.0);
-
-        ArrayNode coords = mapper.createArrayNode();
-        for (Edge e : trayecto.edges()) {
-            Nodo n = e.origen();
-            coords.add(mapper.createArrayNode().add(n.lon).add(n.lat));
-        }
-        if (!trayecto.edges().isEmpty()) {
-            Nodo ultimo = trayecto.edges().get(trayecto.edges().size() - 1).destino();
-            coords.add(mapper.createArrayNode().add(ultimo.lon).add(ultimo.lat));
-        }
-
-        ObjectNode geometry = mapper.createObjectNode();
-        geometry.put("type", "LineString");
-        geometry.set("coordinates", coords);
-
-        ObjectNode feature = mapper.createObjectNode();
-        feature.put("type", "Feature");
-        feature.set("properties", props);
-        feature.set("geometry", geometry);
-
         ArrayNode features = mapper.createArrayNode();
-        features.add(feature);
+        for (RutaExportable ruta : rutas) {
+            Trayecto trayecto = ruta.trayecto();
+            ObjectNode props = mapper.createObjectNode();
+            props.put("nombre", ruta.nombre());
+            props.put("empresa", trayecto.empresa());
+            props.put("sentido", trayecto.sentido());
+            props.put("color", ruta.color());
+            props.put("distancia_km", trayecto.distanciaMetros() / 1000.0);
+            props.put("tiempo_min", trayecto.tiempoSegundos() / 60.0);
+
+            ArrayNode coords = mapper.createArrayNode();
+            for (Edge e : trayecto.edges()) {
+                Nodo n = e.origen();
+                coords.add(mapper.createArrayNode().add(n.lon).add(n.lat));
+            }
+            if (!trayecto.edges().isEmpty()) {
+                Nodo ultimo = trayecto.edges().getLast().destino();
+                coords.add(mapper.createArrayNode().add(ultimo.lon).add(ultimo.lat));
+            }
+
+            ObjectNode geometry = mapper.createObjectNode();
+            geometry.put("type", "LineString");
+            geometry.set("coordinates", coords);
+
+            ObjectNode feature = mapper.createObjectNode();
+            feature.put("type", "Feature");
+            feature.set("properties", props);
+            feature.set("geometry", geometry);
+            features.add(feature);
+        }
         root.set("features", features);
 
         Files.writeString(destino, mapper.writerWithDefaultPrettyPrinter()

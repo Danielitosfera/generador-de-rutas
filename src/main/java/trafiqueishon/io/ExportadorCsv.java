@@ -7,21 +7,43 @@ import trafiqueishon.ruta.Trayecto;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Locale;
 
 public final class ExportadorCsv {
 
     public void exportar(Trayecto trayecto, Path destino) throws IOException {
+        exportar(List.of(new RutaExportable(trayecto.nombre(), "#00A8FF", trayecto)), destino);
+    }
+
+    public void exportar(List<RutaExportable> rutas, Path destino) throws IOException {
+        if (rutas.isEmpty()) throw new IllegalArgumentException("Selecciona al menos una ruta.");
         StringBuilder sb = new StringBuilder();
-        sb.append("orden,lon,lat,calle,highway,longitud_m\n");
-        int i = 0;
-        for (Edge e : trayecto.edges()) {
-            Nodo n = e.origen();
-            sb.append(++i).append(',')
-                    .append(n.lon).append(',')
-                    .append(n.lat).append(',')
-                    .append(escape(e.name)).append(',')
-                    .append(escape(e.highway)).append(',')
-                    .append(String.format("%.2f", e.longitudMetros())).append('\n');
+        sb.append("ruta,sentido,color,orden,lon,lat,calle,highway,longitud_m\n");
+        for (RutaExportable ruta : rutas) {
+            int i = 0;
+            for (Edge e : ruta.trayecto().edges()) {
+                Nodo n = e.origen();
+                sb.append(escape(ruta.nombre())).append(',')
+                        .append(escape(ruta.trayecto().sentido())).append(',')
+                        .append(escape(ruta.color())).append(',')
+                        .append(++i).append(',')
+                        .append(n.lon).append(',')
+                        .append(n.lat).append(',')
+                        .append(escape(e.name)).append(',')
+                        .append(escape(e.highway)).append(',')
+                        .append(String.format(Locale.ROOT, "%.2f", e.longitudMetros()))
+                        .append('\n');
+            }
+            if (!ruta.trayecto().edges().isEmpty()) {
+                Nodo ultimo = ruta.trayecto().edges().getLast().destino();
+                sb.append(escape(ruta.nombre())).append(',')
+                        .append(escape(ruta.trayecto().sentido())).append(',')
+                        .append(escape(ruta.color())).append(',')
+                        .append(++i).append(',')
+                        .append(ultimo.lon).append(',')
+                        .append(ultimo.lat).append(",,,0\n");
+            }
         }
         Files.writeString(destino, sb.toString());
     }
