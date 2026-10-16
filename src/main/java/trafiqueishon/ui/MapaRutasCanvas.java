@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /*
  * Trafiqueishon - Sistema de rutas y simulación de transporte
  * Módulo: interfaz
@@ -17,11 +18,16 @@
  *
  * @author Luis Yujra (LY)
  */
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 package trafiqueishon.ui;
 
 import javafx.application.Platform;
 import javafx.animation.AnimationTimer;
+<<<<<<< HEAD
 import javafx.geometry.VPos;
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.layout.Pane;
@@ -29,6 +35,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.shape.StrokeLineJoin;
 import javafx.scene.text.Font;
+<<<<<<< HEAD
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
@@ -36,6 +43,11 @@ import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.index.strtree.STRtree;
 import trafiqueishon.geo.*;
 import trafiqueishon.ruta.PaletaColores;
+=======
+import org.locationtech.jts.geom.Envelope;
+import org.locationtech.jts.index.strtree.STRtree;
+import trafiqueishon.geo.*;
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 import trafiqueishon.ruta.PuntoImportante;
 import trafiqueishon.ruta.Trayecto;
 import trafiqueishon.simulacion.EventoTrafico;
@@ -54,12 +66,19 @@ import java.util.logging.Logger;
 public class MapaRutasCanvas extends Pane {
     private static final Logger LOG = Logger.getLogger(MapaRutasCanvas.class.getName());
     private static final long INTERVALO_RENDER_NANOS = 1_000_000_000L / 24;
+<<<<<<< HEAD
     private Color fondo = Color.web("#181825");
     private Color colorTitulo = Color.web("#89B4FA");
     // Los colores de recorrido salen de PaletaColores (misma fuente que el simulador).
     private static final Color COLOR_RUTA_PRINCIPAL = Color.web(PaletaColores.COLOR_RUTA_IDA);
     private static final Color COLOR_RUTA_RETORNO = Color.web(PaletaColores.COLOR_RUTA_VUELTA);
     private static final Color COLOR_RUTA_ACTIVA = Color.web(PaletaColores.COLOR_RUTA_ACTIVA);
+=======
+    private Color fondo = Color.web("#1E1E2E");
+    private Color colorTitulo = Color.web("#89B4FA");
+    private static final Color COLOR_RUTA_PRINCIPAL = Color.web("#00A8FF");
+    private static final Color COLOR_RUTA_RETORNO = Color.web("#FF1744");
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
     private static final Color COLOR_PUNTO = Color.web("#F9E2AF");
     private Color colorPuntoBorde = Color.web("#1E1E2E");
     private Color colorPuntoTexto = Color.web("#CDD6F4");
@@ -70,11 +89,18 @@ public class MapaRutasCanvas extends Pane {
     private static final Font FONT_TITULO = Font.font("System", 14);
     private static final Font FONT_PUNTO = Font.font("System", 11);
 
+<<<<<<< HEAD
     private static final Color FONDO_OSCURO = Color.web("#181825");
     private static final Color[] COLORES_VIAS_OSCURO = {
             Color.web("#9399B2"), Color.web("#7F849C"), Color.web("#6C7086"),
             Color.web("#585B70"), Color.web("#45475A"), Color.web("#45475A"),
             Color.web("#3B3D4F"), Color.web("#4A4538"), Color.web("#585B70")
+=======
+    private static final Color[] COLORES_VIAS_OSCURO = {
+            Color.web("#E892A2"), Color.web("#FCD6A4"), Color.web("#F7FABD"),
+            Color.WHITE, Color.web("#AAAAAA"), Color.web("#666666"),
+            Color.web("#555555"), Color.web("#8B7355"), Color.web("#777777")
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
     };
     private static final Color[] COLORES_VIAS_CLARO = {
             Color.web("#B44B61"), Color.web("#C47B28"), Color.web("#9C8C15"),
@@ -83,6 +109,7 @@ public class MapaRutasCanvas extends Pane {
     };
     private static final int TAMANO_CELDA_VEHICULOS = 18;
 
+<<<<<<< HEAD
     // ===== Croquis =====
     private static final Color CROQUIS_CALLE = Color.web("#8A8A8A");
     private static final Color CROQUIS_TRAMADO = Color.web("#BDBDBD");
@@ -100,6 +127,8 @@ public class MapaRutasCanvas extends Pane {
 
     private record DensidadUrbana(boolean[] celdas, double cx, double cy) {}
 
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
     private static final double[] ZOOMS = {
             0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0,
             12.0, 16.0, 24.0, 32.0, 48.0, 72.0, 108.0, 162.0, 243.0,
@@ -116,10 +145,13 @@ public class MapaRutasCanvas extends Pane {
     private List<Edge> viasCerradas = List.of();
     private Color[] coloresVias = COLORES_VIAS_OSCURO;
     private boolean temaClaro;
+<<<<<<< HEAD
     private boolean modoCroquis = true;
     private boolean[] zonaUrbana;
     private List<ZonaCroquis> zonas = List.of();
     private boolean zonasDefinidas;
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
     private int columnasVehiculos;
     private int[] cantidadVehiculosPorCelda = new int[0];
     private Color[] colorVehiculosPorCelda = new Color[0];
@@ -218,7 +250,10 @@ public class MapaRutasCanvas extends Pane {
             }
         });
 
+<<<<<<< HEAD
         aplicarEstiloBase();
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
         renderizador.start();
         cargarMapa();
     }
@@ -237,10 +272,13 @@ public class MapaRutasCanvas extends Pane {
                 }
                 indice.build();
 
+<<<<<<< HEAD
                 DensidadUrbana densidad = calcularDensidadUrbana(cargadas);
                 ZonaCroquis zonaPrincipal = new ZonaCroquis("JULIACA",
                         p.getMinLon() + densidad.cx() * p.getAnchoGeo(),
                         p.getMaxLat() - densidad.cy() * p.getAltoGeo());
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                 GrafoVial g = new GrafoVial();
                 g.construir(cargadas, p);
                 for (Via v : cargadas) v.liberarCoords();
@@ -250,8 +288,11 @@ public class MapaRutasCanvas extends Pane {
                     indiceVias = indice;
                     grafo = g;
                     proyector = p;
+<<<<<<< HEAD
                     zonaUrbana = densidad.celdas();
                     if (!zonasDefinidas) zonas = List.of(zonaPrincipal);
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                     cargado = true;
                     viasCerradas = List.of();
                     viasNecesitanRedibujarse = true;
@@ -328,6 +369,7 @@ public class MapaRutasCanvas extends Pane {
             boolean hayRutaMicroVisible = rutasMicros.stream()
                     .anyMatch(ruta -> rutasMicrosVisibles.contains(ruta.id()));
             if (hayRutaMicroVisible) {
+<<<<<<< HEAD
                 boolean unica = unicaMicroVisible() != null;
                 for (ServicioMicro servicio : rutasMicros) {
                     if (!rutasMicrosVisibles.contains(servicio.id())) continue;
@@ -338,6 +380,13 @@ public class MapaRutasCanvas extends Pane {
                     if (mostrarVueltaNeon) {
                         dibujarTrayecto(gc, servicio.trayectoVuelta(),
                                 unica ? COLOR_RUTA_RETORNO : Color.web(servicio.color()));
+=======
+                for (ServicioMicro servicio : rutasMicros) {
+                    if (!rutasMicrosVisibles.contains(servicio.id())) continue;
+                    if (mostrarIdaNeon) dibujarTrayecto(gc, servicio.trayecto(), COLOR_RUTA_PRINCIPAL);
+                    if (mostrarVueltaNeon) {
+                        dibujarTrayecto(gc, servicio.trayectoVuelta(), COLOR_RUTA_RETORNO);
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                     }
                 }
             } else {
@@ -358,7 +407,10 @@ public class MapaRutasCanvas extends Pane {
         dibujarPuntos(gc);
         dibujarEventos(gc);
         dibujarVehiculos(gc);
+<<<<<<< HEAD
         dibujarLeyenda(gc);
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
     }
 
     private void renderizarVias() {
@@ -367,7 +419,10 @@ public class MapaRutasCanvas extends Pane {
         double w = capaVias.getWidth(), h = capaVias.getHeight();
         gc.setFill(fondo);
         gc.fillRect(0, 0, w, h);
+<<<<<<< HEAD
         if (croquisActivo()) dibujarZonasUrbanas(gc, w, h);
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
         double escalaActual = escalaBase * zoom;
         double vpMinX = (0 - offsetX) / escalaActual - 0.02;
         double vpMaxX = (w - offsetX) / escalaActual + 0.02;
@@ -380,7 +435,10 @@ public class MapaRutasCanvas extends Pane {
 
         dibujarVias(gc, visibles);
         dibujarNombresVias(gc, visibles);
+<<<<<<< HEAD
         dibujarNombresZonas(gc);
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
         dibujarTitulo(gc);
     }
 
@@ -392,10 +450,13 @@ public class MapaRutasCanvas extends Pane {
     }
 
     private void dibujarVias(GraphicsContext gc, List<Via> visibles) {
+<<<<<<< HEAD
         if (croquisActivo()) {
             dibujarViasCroquis(gc, visibles);
             return;
         }
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
         for (List<Via> g : gruposVias) g.clear();
         for (Via v : visibles) {
             if (v.highway == null || v.projX == null || v.projX.length < 2) continue;
@@ -420,7 +481,11 @@ public class MapaRutasCanvas extends Pane {
                     : Math.max(1.8, 2.0 + Math.sqrt(zoom) * 0.5));
             gc.stroke();
             if (zoom >= 6 && i <= 2) {
+<<<<<<< HEAD
                 gc.setStroke(fondoClaro() ? Color.web("#FFFFFF", 0.88)
+=======
+                gc.setStroke(temaClaro ? Color.web("#FFFFFF", 0.88)
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                         : Color.web("#F3F4F8", 0.72));
                 gc.setLineWidth(Math.max(0.7, Math.sqrt(zoom) * 0.12));
                 gc.setLineDashes(Math.max(2, zoom * 0.55), Math.max(2, zoom * 0.4));
@@ -439,7 +504,11 @@ public class MapaRutasCanvas extends Pane {
             gc.moveTo(pantallaX(edge.origen.x), pantallaY(edge.origen.y));
             gc.lineTo(pantallaX(edge.destino.x), pantallaY(edge.destino.y));
         }
+<<<<<<< HEAD
         gc.setStroke(fondoClaro() ? Color.web("#FFFFFF", 0.95) : Color.web("#10111A"));
+=======
+        gc.setStroke(temaClaro ? Color.web("#FFFFFF", 0.95) : Color.web("#10111A"));
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
         gc.setLineWidth(10);
         gc.stroke();
         gc.setStroke(color);
@@ -449,6 +518,7 @@ public class MapaRutasCanvas extends Pane {
     }
 
     private void dibujarRutasMicros(GraphicsContext gc) {
+<<<<<<< HEAD
         boolean unica = unicaMicroVisible() != null;
         for (ServicioMicro servicio : rutasMicros) {
             if (!rutasMicrosVisibles.contains(servicio.id())) continue;
@@ -470,6 +540,15 @@ public class MapaRutasCanvas extends Pane {
         return unica;
     }
 
+=======
+        for (ServicioMicro servicio : rutasMicros) {
+            if (!rutasMicrosVisibles.contains(servicio.id())) continue;
+            dibujarTrayecto(gc, servicio.trayecto(), Color.web(servicio.color()));
+            dibujarTrayecto(gc, servicio.trayectoVuelta(), Color.web(servicio.color()));
+        }
+    }
+
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
     private void dibujarViasCerradas(GraphicsContext gc) {
         if (grafo == null) return;
         gc.setLineCap(StrokeLineCap.ROUND);
@@ -503,9 +582,15 @@ public class MapaRutasCanvas extends Pane {
             String texto = via.name.length() > 40
                     ? via.name.substring(0, 37) + "..." : via.name;
             gc.setLineWidth(3);
+<<<<<<< HEAD
             gc.setStroke(fondoClaro() ? Color.WHITE : Color.BLACK);
             gc.strokeText(texto, x + 1, y + 1);
             gc.setFill(fondoClaro() ? Color.web("#202735") : Color.WHITE);
+=======
+            gc.setStroke(temaClaro ? Color.WHITE : Color.BLACK);
+            gc.strokeText(texto, x + 1, y + 1);
+            gc.setFill(temaClaro ? Color.web("#202735") : Color.WHITE);
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
             gc.fillText(texto, x, y);
         }
     }
@@ -640,12 +725,16 @@ public class MapaRutasCanvas extends Pane {
                     : vehiculo.estado() == PosicionVehiculo.Estado.DETENIDO
                     || vehiculo.estado() == PosicionVehiculo.Estado.EN_PARADA
                     ? Color.YELLOW
+<<<<<<< HEAD
                     : croquisActivo() ? COLOR_RUTA_ACTIVA
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                     : vehiculo.idRuta().isBlank()
                     ? (bus ? Color.DEEPSKYBLUE : Color.LIGHTGREEN)
                     : Color.web(vehiculo.color());
             gc.setFill(color);
             gc.fillRoundRect(px - ancho / 2, py - alto / 2, ancho, alto, 4, 4);
+<<<<<<< HEAD
             gc.setFill(fondoClaro() ? Color.web("#263142") : Color.web("#17202A"));
             gc.fillRect(px - ancho / 3, py - alto / 2 + 1, ancho / 2, alto / 3);
             gc.setFill(fondoClaro() ? Color.web("#263142") : Color.BLACK);
@@ -656,6 +745,18 @@ public class MapaRutasCanvas extends Pane {
                 gc.setLineWidth(3);
                 gc.strokeText(vehiculo.nombreRuta(), px + 10, py - 5);
                 gc.setFill(fondoClaro() ? Color.web("#202735") : Color.WHITE);
+=======
+            gc.setFill(temaClaro ? Color.web("#263142") : Color.web("#17202A"));
+            gc.fillRect(px - ancho / 3, py - alto / 2 + 1, ancho / 2, alto / 3);
+            gc.setFill(temaClaro ? Color.web("#263142") : Color.BLACK);
+            gc.fillOval(px - ancho / 3, py + alto / 4, 4, 4);
+            gc.fillOval(px + ancho / 6, py + alto / 4, 4, 4);
+            if (zoom >= 40 && etiquetasDibujadas < 80) {
+                gc.setStroke(temaClaro ? Color.WHITE : Color.BLACK);
+                gc.setLineWidth(3);
+                gc.strokeText(vehiculo.nombreRuta(), px + 10, py - 5);
+                gc.setFill(temaClaro ? Color.web("#202735") : Color.WHITE);
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                 gc.setFont(Font.font("System", 9));
                 gc.fillText(vehiculo.nombreRuta() + " · " + vehiculo.pasajeros() + " pax",
                         px + 10, py - 5);
@@ -696,8 +797,12 @@ public class MapaRutasCanvas extends Pane {
             case SIN_RUTA -> Color.RED;
             case AVERIADO -> Color.ORANGE;
             case DETENIDO, EN_PARADA -> Color.YELLOW;
+<<<<<<< HEAD
             case EN_RUTA -> croquisActivo() ? COLOR_RUTA_ACTIVA
                     : vehiculo.idRuta().isBlank()
+=======
+            case EN_RUTA -> vehiculo.idRuta().isBlank()
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                     ? Color.DEEPSKYBLUE : Color.web(vehiculo.color());
         };
     }
@@ -837,7 +942,15 @@ public class MapaRutasCanvas extends Pane {
     public void setTemaClaro(boolean claro) {
         Runnable actualizar = () -> {
             temaClaro = claro;
+<<<<<<< HEAD
             aplicarEstiloBase();
+=======
+            fondo = claro ? Color.web("#F3F6FA") : Color.web("#1E1E2E");
+            colorTitulo = claro ? Color.web("#263B5A") : Color.web("#89B4FA");
+            colorPuntoBorde = claro ? Color.WHITE : Color.web("#1E1E2E");
+            colorPuntoTexto = claro ? Color.web("#253249") : Color.web("#CDD6F4");
+            coloresVias = claro ? COLORES_VIAS_CLARO : COLORES_VIAS_OSCURO;
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
             redibujarMapa();
         };
         if (Platform.isFxApplicationThread()) actualizar.run();
@@ -897,6 +1010,7 @@ public class MapaRutasCanvas extends Pane {
         });
     }
 
+<<<<<<< HEAD
     /** Activa el aspecto de croquis (fondo blanco, calles grises, zonas, leyenda). */
     public void setModoCroquis(boolean activo) {
         Runnable actualizar = () -> {
@@ -1107,6 +1221,8 @@ public class MapaRutasCanvas extends Pane {
         return new DensidadUrbana(densa, peso > 0 ? sx / peso : 0.5, peso > 0 ? sy / peso : 0.5);
     }
 
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
     public void setOnMapaCargado(Runnable cb) {
         onMapaCargado = cb;
         if (cargado && cb != null) cb.run();

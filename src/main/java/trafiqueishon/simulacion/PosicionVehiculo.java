@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /*
  * Trafiqueishon - Sistema de rutas y simulación de transporte
  * Módulo: simulación
@@ -21,6 +22,10 @@ package trafiqueishon.simulacion;
 
 import trafiqueishon.ruta.PaletaColores;
 
+=======
+package trafiqueishon.simulacion;
+
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 public record PosicionVehiculo(double x, double y, TipoVehiculo tipo,
                                int pasajeros, int capacidad, String idRuta, String nombreRuta,
                                String color, Estado estado) {
@@ -30,12 +35,20 @@ public record PosicionVehiculo(double x, double y, TipoVehiculo tipo,
     }
 
     public PosicionVehiculo(double x, double y, TipoVehiculo tipo) {
+<<<<<<< HEAD
         this(x, y, tipo, 0, tipo == TipoVehiculo.BUS ? 50 : 18, "", "", PaletaColores.COLOR_RUTA_ACTIVA,
+=======
+        this(x, y, tipo, 0, tipo == TipoVehiculo.BUS ? 50 : 18, "", "", "#00A8FF",
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                 Estado.EN_RUTA);
     }
 
     public PosicionVehiculo(double x, double y, TipoVehiculo tipo, int pasajeros, int capacidad) {
+<<<<<<< HEAD
         this(x, y, tipo, pasajeros, capacidad, "", "", PaletaColores.COLOR_RUTA_ACTIVA, Estado.EN_RUTA);
+=======
+        this(x, y, tipo, pasajeros, capacidad, "", "", "#00A8FF", Estado.EN_RUTA);
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
     }
 
     public enum Estado { EN_RUTA, EN_PARADA, DETENIDO, AVERIADO, SIN_RUTA }

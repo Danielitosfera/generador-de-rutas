@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /*
  * Trafiqueishon - Sistema de rutas y simulación de transporte
  * Módulo: datos
@@ -17,6 +18,8 @@
  *
  * @author Daniel Taza (DT)
  */
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 package trafiqueishon.io;
 
 import org.junit.jupiter.api.Test;

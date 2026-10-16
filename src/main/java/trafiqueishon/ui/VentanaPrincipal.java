@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /*
  * Trafiqueishon - Sistema de rutas y simulación de transporte
  * Módulo: interfaz
@@ -17,6 +18,8 @@
  *
  * @author Luis Yujra (LY)
  */
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 package trafiqueishon.ui;
 
 import javafx.animation.AnimationTimer;
@@ -70,8 +73,11 @@ public class VentanaPrincipal {
     private final BorderPane root = new BorderPane();
     private final StackPane capaCentral = new StackPane();
     private final MapaRutasCanvas mapa = new MapaRutasCanvas();
+<<<<<<< HEAD
     private final PanelParadas panelParadas = new PanelParadas();
     private final VistaCroquis vistaCroquis = new VistaCroquis(mapa);
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
     private final VBox barraSuperior = new VBox();
     private HBox barraEstado;
     private final TabPane panelLateral = new TabPane();
@@ -179,9 +185,13 @@ public class VentanaPrincipal {
         root.getStyleClass().add("root-view");
         aplicarClaseTema();
         mapa.setTemaClaro(temaClaro);
+<<<<<<< HEAD
         StackPane.setAlignment(panelParadas, Pos.TOP_RIGHT);
         StackPane.setMargin(panelParadas, new Insets(12));
         capaCentral.getChildren().addAll(vistaCroquis, panelParadas);
+=======
+        capaCentral.getChildren().add(mapa);
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
         root.setCenter(capaCentral);
 
         barraSuperior.getChildren().setAll(crearToolbar());
@@ -344,16 +354,22 @@ public class VentanaPrincipal {
         claro.setSelected(temaClaro);
         oscuro.setOnAction(e -> aplicarTema(false));
         claro.setOnAction(e -> aplicarTema(true));
+<<<<<<< HEAD
         CheckMenuItem croquis = new CheckMenuItem("Vista croquis (fondo blanco)");
         croquis.setSelected(true);
         croquis.setOnAction(e -> ejecutarSeguro("vista croquis",
                 () -> vistaCroquis.setModoCroquis(croquis.isSelected())));
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
         vistas.getItems().addAll(
                 item("Mostrar / ocultar panel (Tab)", this::alternarPanelLateral),
                 item("Modo presentación (F11)", this::alternarPresentacion),
                 new SeparatorMenuItem(),
                 oscuro, claro, new SeparatorMenuItem(),
+<<<<<<< HEAD
                 croquis, new SeparatorMenuItem(),
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                 item("Ajustar mapa", mapa::resetVistaPublico));
 
         Menu ayuda = new Menu("Ayuda");
@@ -1000,6 +1016,7 @@ public class VentanaPrincipal {
     private void actualizarVisualizacionRutas() {
         mapa.setRutasMicros(rutasMicros, rutasMicrosVisibles);
         mapa.setMostrarRutasNeon(chkIdaNeon.isSelected(), chkVueltaNeon.isSelected());
+<<<<<<< HEAD
         actualizarPanelParaderos();
     }
 
@@ -1009,6 +1026,8 @@ public class VentanaPrincipal {
                 .filter(ruta -> rutasMicrosVisibles.contains(ruta.id())).toList();
         if (seleccionadas.size() == 1) panelParadas.mostrar(seleccionadas.getFirst());
         else panelParadas.ocultar();
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
     }
 
     // ==================================================================
@@ -1302,7 +1321,11 @@ public class VentanaPrincipal {
             lista.setPrefWidth(430);
 
             ComboBox<String> formato = new ComboBox<>(FXCollections.observableArrayList(
+<<<<<<< HEAD
                     "PDF", "GeoJSON", "GPX", "CSV", "TXT"));
+=======
+                    "PDF", "GeoJSON", "GPX", "CSV"));
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
             formato.getSelectionModel().selectFirst();
             Button seleccionarVisibles = new Button("Marcar visibles");
             seleccionarVisibles.setOnAction(event -> {
@@ -1342,7 +1365,10 @@ public class VentanaPrincipal {
                 case "GeoJSON" -> "geojson";
                 case "GPX" -> "gpx";
                 case "CSV" -> "csv";
+<<<<<<< HEAD
                 case "TXT" -> "txt";
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                 default -> throw new IllegalArgumentException("Formato de exportación inválido.");
             };
             FileChooser chooser = new FileChooser();
@@ -1362,7 +1388,10 @@ public class VentanaPrincipal {
                 case "geojson" -> expGeoJson.exportar(seleccionadas, destino);
                 case "gpx" -> expGpx.exportar(seleccionadas, destino);
                 case "csv" -> expCsv.exportar(seleccionadas, destino);
+<<<<<<< HEAD
                 case "txt" -> new ExportadorTxt().exportar(seleccionadas, destino);
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                 default -> throw new IllegalArgumentException("Formato desconocido: " + extension);
             }
             lblEstado.setText("Exportadas " + seleccionadas.size() + " rutas: " + destino);
@@ -1386,7 +1415,11 @@ public class VentanaPrincipal {
         for (int i = 0; i < calculados.size(); i++) {
             Trayecto trayecto = calculados.get(i);
             boolean retorno = "RETORNO".equalsIgnoreCase(trayecto.sentido());
+<<<<<<< HEAD
             String color = retorno ? PaletaColores.COLOR_RUTA_VUELTA : PaletaColores.COLOR_RUTA_IDA;
+=======
+            String color = retorno ? "#FF1744" : "#00A8FF";
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
             boolean visible = retorno ? chkVueltaNeon.isSelected() : chkIdaNeon.isSelected();
             opciones.add(new OpcionExportacion(new RutaExportable(trayecto.nombre(), color, trayecto),
                     i == calculados.size() - 1, visible));

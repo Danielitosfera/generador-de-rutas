@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /*
  * Trafiqueishon - Sistema de rutas y simulación de transporte
  * Módulo: simulación
@@ -17,6 +18,8 @@
  *
  * @author Eberth Mamani (EM)
  */
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 package trafiqueishon.simulacion;
 
 import org.junit.jupiter.api.Test;

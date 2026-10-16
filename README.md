@@ -49,6 +49,7 @@ software como alternativa si el controlador no es compatible.
   tarde 2.8x y noche 0.2x), limita el abordaje a 18 pasajeros por micro y deja
   una espera aproximada de 15 segundos en las paradas configuradas.
 - Las rutas de **ida** y **vuelta** se dibujan encima de la red con colores
+<<<<<<< HEAD
   exclusivos (ida roja, vuelta azul; unidades en movimiento en verde), con
   borde y casillas separadas para mostrar/ocultar cada una. Los tres colores
   salen de `trafiqueishon.ruta.PaletaColores`, única fuente para mapa,
@@ -62,6 +63,10 @@ software como alternativa si el controlador no es compatible.
 - **Exportar rutas** admite también TXT: lista en orden todos los puntos del
   recorrido de partida y de retorno con sus coordenadas (x = longitud,
   y = latitud).
+=======
+  exclusivos (azul neón y rojo neón), con borde oscuro y casillas separadas
+  para mostrar/ocultar cada una. Los botones de enfoque encuadran cada ruta.
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 - En **Rutas y micros disponibles** se crean servicios con nombre, paraderos
   seleccionados y ordenables, frecuencia de salida y cantidad de unidades. El
   sistema fija como terminales los dos paraderos más alejados en tiempo de viaje
@@ -81,7 +86,11 @@ software como alternativa si el controlador no es compatible.
   recorrer la ruta inversa. Se asignan hasta 18 pasajeros por salida.
   Cada servicio se dibuja con su color propio; al activar las casillas de ida o
   vuelta, se ocultan esos colores de ruta y se muestran los trazados generales
+<<<<<<< HEAD
   los colores de la paleta (ida roja, vuelta azul).
+=======
+  azul y rojo neón.
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 - **Exportar rutas** permite marcar una micro y su ida/vuelta individualmente,
   usar las rutas visibles, marcar todas o seleccionar cualquier combinación.
   Exporta varios trazados juntos en PDF con mapa, leyenda de colores y marcas de

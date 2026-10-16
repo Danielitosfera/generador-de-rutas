@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /*
  * Trafiqueishon - Sistema de rutas y simulación de transporte
  * Módulo: simulación
@@ -17,6 +18,8 @@
  *
  * @author Eberth Mamani (EM)
  */
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 package trafiqueishon.simulacion;
 
 import trafiqueishon.geo.GrafoVial;
@@ -24,7 +27,10 @@ import trafiqueishon.geo.Pathfinder;
 import trafiqueishon.geo.RutaResult;
 import trafiqueishon.geo.Edge;
 import trafiqueishon.geo.Nodo;
+<<<<<<< HEAD
 import trafiqueishon.ruta.PaletaColores;
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 import trafiqueishon.ruta.Trayecto;
 
 import java.util.ArrayList;
@@ -33,7 +39,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+<<<<<<< HEAD
 import java.util.Optional;
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -74,7 +83,11 @@ public final class SimuladorBuses {
                     ? PosicionVehiculo.TipoVehiculo.MINIBUS
                     : PosicionVehiculo.TipoVehiculo.BUS;
             vehiculos.add(new Vehiculo(trayecto.edges(), trayecto.edges(), tipo,
+<<<<<<< HEAD
                     0, "", "Flota", PaletaColores.COLOR_RUTA_ACTIVA, 0));
+=======
+                    0, "", "Flota", "#00A8FF", 0));
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
         }
         ejecutando = true;
     }
@@ -105,7 +118,11 @@ public final class SimuladorBuses {
             int asignados = Math.min(capacidad(tipo), pasajerosPendientes);
             pasajerosPendientes -= asignados;
             vehiculos.add(new Vehiculo(trayecto.edges(), trayecto.edges(), tipo, asignados,
+<<<<<<< HEAD
                     "", "Flota", PaletaColores.COLOR_RUTA_ACTIVA, 0));
+=======
+                    "", "Flota", "#00A8FF", 0));
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
         }
         ejecutando = true;
     }
@@ -167,9 +184,15 @@ public final class SimuladorBuses {
                 .collect(java.util.stream.Collectors.toMap(ServicioMicro::id, servicio -> servicio,
                         (primero, ultimo) -> ultimo));
         for (DespachoProgramado despacho : despachos) {
+<<<<<<< HEAD
             ServicioMicro actualizado = porId.get(despacho.despachador.servicio().id());
             if (actualizado != null) {
                 despacho.despachador.actualizarServicio(actualizado);
+=======
+            ServicioMicro actualizado = porId.get(despacho.servicio.id());
+            if (actualizado != null) {
+                despacho.servicio = actualizado;
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                 despacho.paradasIda = nodosParadas(actualizado.trayecto());
                 despacho.paradasVuelta = nodosParadas(actualizado.trayectoVuelta());
             }
@@ -268,13 +291,20 @@ public final class SimuladorBuses {
 
     public int minutosHastaProximoDespacho() {
         return despachos.stream()
+<<<<<<< HEAD
                 .filter(d -> !d.despachador.terminado())
                 .mapToInt(d -> d.despachador.minutosHastaProximoDespacho(segundosTranscurridos))
                 .min().orElse(-1);
+=======
+                .filter(d -> d.unidadesDespachadas < d.servicio.unidadesDisponibles())
+                .mapToInt(d -> (int) Math.ceil(
+                Math.max(0, d.proximoDespacho - segundosTranscurridos) / 60)).min().orElse(-1);
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
     }
 
     private void procesarDespachos() {
         for (DespachoProgramado despacho : despachos) {
+<<<<<<< HEAD
             Despachador despachador = despacho.despachador;
             ServicioMicro servicio = despachador.servicio();
             try {
@@ -284,6 +314,19 @@ public final class SimuladorBuses {
                     Despachador.Salida salida = pendiente.get();
                     int abordados = salida.pasajeros();
                     boolean saleDelFinal = salida.desdeTerminalFinal();
+=======
+            ServicioMicro servicio = despacho.servicio;
+            try {
+                while (despacho.unidadesDespachadas < servicio.unidadesDisponibles()
+                        && despacho.proximoDespacho <= segundosTranscurridos) {
+                    int demandaNueva = (int) Math.round(despacho.demandaPorSalida
+                            * PerfilHoraPunta.factorDemanda(horaActualMinutos()));
+                    despacho.pasajerosPendientes = Math.addExact(
+                            despacho.pasajerosPendientes, demandaNueva);
+                    int abordados = Math.min(18, despacho.pasajerosPendientes);
+                    despacho.pasajerosPendientes -= abordados;
+                    boolean saleDelFinal = despacho.unidadesDespachadas % 2 == 1;
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                     Vehiculo vehiculo = new Vehiculo(
                             saleDelFinal ? servicio.trayectoVuelta().edges()
                                     : servicio.trayecto().edges(),
@@ -298,9 +341,21 @@ public final class SimuladorBuses {
                             ? vehiculo.paradasIda : vehiculo.paradasVuelta;
                     vehiculos.add(vehiculo);
                     pasajerosTransportados += abordados;
+<<<<<<< HEAD
                 }
             } catch (RuntimeException ex) {
                 despachador.finalizar();
+=======
+                    despacho.unidadesDespachadas++;
+                    if (despacho.unidadesDespachadas == 1
+                            && servicio.unidadesDisponibles() > 1) {
+                        continue;
+                    }
+                    despacho.proximoDespacho += servicio.frecuenciaMinutos() * 60.0;
+                }
+            } catch (RuntimeException ex) {
+                despacho.unidadesDespachadas = servicio.unidadesDisponibles();
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                 LOG.log(Level.SEVERE, "Se aisló un error en el despacho de " + servicio.nombre(),
                         ex);
             }
@@ -312,10 +367,17 @@ public final class SimuladorBuses {
             PerfilHoraPunta.aplicar(grafo, horaActual);
         } else {
             for (DespachoProgramado despacho : despachos) {
+<<<<<<< HEAD
                 for (var edge : despacho.despachador.servicio().trayecto().edges()) {
                     edge.factorHoraPunta = factorHoraPunta;
                 }
                 for (var edge : despacho.despachador.servicio().trayectoVuelta().edges()) {
+=======
+                for (var edge : despacho.servicio.trayecto().edges()) {
+                    edge.factorHoraPunta = factorHoraPunta;
+                }
+                for (var edge : despacho.servicio.trayectoVuelta().edges()) {
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
                     edge.factorHoraPunta = factorHoraPunta;
                 }
             }
@@ -546,12 +608,27 @@ public final class SimuladorBuses {
     }
 
     private static final class DespachoProgramado {
+<<<<<<< HEAD
         private final Despachador despachador;
         private List<Nodo> paradasIda;
         private List<Nodo> paradasVuelta;
 
         private DespachoProgramado(ServicioMicro servicio) {
             this.despachador = new Despachador(servicio);
+=======
+        private ServicioMicro servicio;
+        private final int demandaPorSalida;
+        private List<Nodo> paradasIda;
+        private List<Nodo> paradasVuelta;
+        private int pasajerosPendientes;
+        private int unidadesDespachadas;
+        private double proximoDespacho;
+
+        private DespachoProgramado(ServicioMicro servicio) {
+            this.servicio = servicio;
+            demandaPorSalida = (int) Math.ceil((double) servicio.pasajerosEsperando()
+                    / servicio.unidadesDisponibles());
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
         }
     }
 

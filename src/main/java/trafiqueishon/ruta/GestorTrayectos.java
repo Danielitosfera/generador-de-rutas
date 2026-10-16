@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /*
  * Trafiqueishon - Sistema de rutas y simulación de transporte
  * Módulo: dominio
@@ -17,6 +18,8 @@
  *
  * @author Piero Gonzales (PG)
  */
+=======
+>>>>>>> e8b7abb8ec556353e5a6371a8d51ea852ffcdd32
 package trafiqueishon.ruta;
 
 import java.util.ArrayList;
